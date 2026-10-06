@@ -16,6 +16,19 @@ DualSense's pairing.
 | The Ultimate 2C Wireless over Bluetooth, without the dongle | ❌ not yet |
 | Other 8BitDo 2.4G dongles | untested: run `pad2c-probe.elf` and open an issue with its output |
 
+## Why this controller, and why the dongle
+
+**The controller** is simply the one I own: pad2c was made to play with it on my PS5, next to the DualSense.
+
+**The dongle instead of Bluetooth**, on purpose:
+
+- **No conflicts.** The PS5 has one Bluetooth chip, and the system uses it for the DualSense. Sharing it from a
+  payload risks taking over or unpairing the DualSense, and the chip is laid out differently from one console model
+  to another. The dongle is a plain USB device: pad2c never touches the console's Bluetooth.
+- **Simpler.** No pairing, no Bluetooth stack to keep alive, no reconnection logic: the dongle and the controller
+  already talk to each other, and pad2c only reads what the dongle sends.
+- **Practical.** Plug the dongle into a USB port and switch the controller on. That is all.
+
 ## FAQ
 
 **Can I use an 8BitDo controller on a PS5?** Not on a stock PS5: it only accepts its own and a few licensed
