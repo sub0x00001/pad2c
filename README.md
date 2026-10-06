@@ -7,6 +7,17 @@ pad2c is a payload for a jailbroken PS5. It reads the 8BitDo 2.4G dongle plugged
 shows it to the system and to games as a **virtual DualSense**. No Bluetooth is involved, so it never touches your
 DualSense's pairing.
 
+## Screenshots
+
+Switching the 8BitDo on and off, with pad2c running on the console:
+
+<p align="center">
+  <img src="docs/images/connected.jpg" width="45%" alt="The PS5 shows 'pad2c: 8BitDo connected' and asks who is using the controller">
+  &nbsp;
+  <img src="docs/images/disconnected.jpg" width="45%" alt="The PS5 shows 'pad2c: 8BitDo disconnected'">
+</p>
+<p align="center"><em>Left: switched on; the console asks who is using the controller. Right: switched off.</em></p>
+
 ## Which controller
 
 | Controller | Supported |
