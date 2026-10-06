@@ -1,0 +1,4 @@
+build/
+dist/*.elf
+!dist/.keep
+release/
