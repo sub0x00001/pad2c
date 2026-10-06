@@ -18,7 +18,9 @@ DualSense's pairing.
 
 ## Why this controller, and why the dongle
 
-**The controller** is simply the one I own: pad2c was made to play with it on my PS5, next to the DualSense.
+**The controller** is simply the one I own: pad2c was made to play with it on my PS5, next to the DualSense. It is
+also a cheap way to get a second controller: a DualSense costs at least twice as much as the Ultimate 2C Wireless,
+which still has Hall effect sticks and triggers.
 
 **The dongle instead of Bluetooth**, on purpose:
 
