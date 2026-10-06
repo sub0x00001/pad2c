@@ -1,10 +1,33 @@
 # pad2c
 
-**Use an 8BitDo Ultimate 2C (2.4G dongle) as a second controller on a jailbroken PS5, next to your DualSense.**
+**Use an [8BitDo Ultimate 2C Wireless Controller](https://www.8bitdo.com/ultimate-2c-wireless-controller/) on a
+jailbroken PS5, as a second controller next to your DualSense.**
 
 pad2c is a payload for a jailbroken PS5. It reads the 8BitDo 2.4G dongle plugged into the console's USB port and
 shows it to the system and to games as a **virtual DualSense**. No Bluetooth is involved, so it never touches your
 DualSense's pairing.
+
+## Which controller
+
+| Controller | Supported |
+|---|---|
+| [8BitDo Ultimate 2C **Wireless** Controller](https://www.8bitdo.com/ultimate-2c-wireless-controller/) (the one sold for PC / Android, with a 2.4G USB dongle), through its dongle | ✅ |
+| 8BitDo Ultimate 2C **Bluetooth** Controller (the Switch edition, no dongle) | ❌ different product |
+| The Ultimate 2C Wireless over Bluetooth, without the dongle | ❌ not yet |
+| Other 8BitDo 2.4G dongles | untested: run `pad2c-probe.elf` and open an issue with its output |
+
+## FAQ
+
+**Can I use an 8BitDo controller on a PS5?** Not on a stock PS5: it only accepts its own and a few licensed
+controllers. On a jailbroken PS5, pad2c makes the 8BitDo Ultimate 2C appear as a DualSense.
+
+**Does it work in games, or only in the menus?** In games too. Give the controller its own console user (the console
+asks when you press Home) and it is player 2, like a second DualSense.
+
+**Do I lose my DualSense?** No. Both work at the same time. pad2c does not use Bluetooth at all.
+
+**Which firmware?** Tested on 13.60 (PS5 Slim). It needs a console that already runs a payload loader such as elfldr
+or Payload Manager; it does not jailbreak anything itself.
 
 ## Status
 
