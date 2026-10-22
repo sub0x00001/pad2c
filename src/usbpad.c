@@ -30,6 +30,9 @@
  * Adapter 2 shows its XInput identity for under a second. */
 static unsigned char g_held[N_BUS][N_ADDR];
 static struct { ino_t ino; long ctime, seen; unsigned char set; } g_not_pad[N_BUS][N_ADDR];
+static char g_reject[96];           /* what try_node last found not to be a pad */
+static char g_logged[N_BUS][N_ADDR][96];    /* per node: the last one logged (a Switch Pro pad
+                                               not set up enumerates again every few seconds) */
 #define T_NOT_PAD   2000        /* ms a node found not to be a pad is left alone, unless it changes */
 
 struct usbpad {
@@ -189,6 +192,9 @@ static usbpad *try_node(int bus, int addr, int *not_pad)
     if (ioctl(u->fd, USB_GET_DEVICE_DESC, &dd) != 0) goto fail;
     u->kind = choose_interface(u->fd, UGETW(dd.idVendor), &pick);
     if (u->kind == USBPAD_NONE) {
+        char prod[48] = "";
+        read_string(u->fd, dd.iProduct, prod, sizeof prod);
+        snprintf(g_reject, sizeof g_reject, "%04x:%04x \"%s\"", UGETW(dd.idVendor), UGETW(dd.idProduct), prod);
         *not_pad = 1;
         goto fail;
     }
@@ -306,6 +312,12 @@ usbpad *usbpad_open(void)
             if ((u = try_node(bus, addr, &not_pad))) {
                 g_not_pad[bus][addr].set = 0;
                 return u;
+            }
+            /* Logged once per device: what is plugged in and not read, to
+             * tell why a controller does nothing (another mode, say). */
+            if (not_pad && strcmp(g_logged[bus][addr], g_reject) != 0) {
+                log_line("usb: %s %s: not a controller padbridge reads", path, g_reject);
+                snprintf(g_logged[bus][addr], sizeof g_logged[bus][addr], "%s", g_reject);
             }
             g_not_pad[bus][addr].set = (unsigned char)not_pad;
             g_not_pad[bus][addr].ino = sb.st_ino;

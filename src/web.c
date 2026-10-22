@@ -90,7 +90,7 @@ int web_status_json(const web_pad *pads, int n, char *out, int size)
 {
     int len, i, first = 1;
 
-    len = snprintf(out, (size_t)size, "{\"version\":\"%s\",\"pads\":[", PAD2C_VERSION);
+    len = snprintf(out, (size_t)size, "{\"version\":\"%s\",\"pads\":[", PADBRIDGE_VERSION);
     for (i = 0; i < n && len < size; i++) {
         const web_pad *p = &pads[i];
         char name[160], user[100];

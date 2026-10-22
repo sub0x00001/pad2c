@@ -10,8 +10,8 @@
  * interface is read is chosen in usbdesc.c. Every re-enumeration ends the
  * open device, so the caller closes it and looks again.
  */
-#ifndef PAD2C_USBPAD_H
-#define PAD2C_USBPAD_H
+#ifndef PADBRIDGE_USBPAD_H
+#define PADBRIDGE_USBPAD_H
 
 #include "pad.h"
 

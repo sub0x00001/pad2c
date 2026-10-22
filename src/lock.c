@@ -53,6 +53,11 @@ static int lock_is_live(const char *path, long boot)
     return kill((pid_t)pid, 0) == 0 || errno == EPERM;
 }
 
+int lock_held(const char *path)
+{
+    return lock_is_live(path, lock_boot_time());
+}
+
 int lock_take(const char *path)
 {
     char buf[64];

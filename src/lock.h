@@ -11,6 +11,7 @@
 /* Returns 1 with the lock held, 0 if another copy is running or the file
  * cannot be created. */
 int  lock_take(const char *path);
+int  lock_held(const char *path);       /* 1 if a running copy holds the lock at path */
 void lock_release(void);
 
 /* The boot time of this machine, in seconds since 1970; 0 if unknown. */

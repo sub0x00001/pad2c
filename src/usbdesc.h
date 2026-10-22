@@ -1,7 +1,7 @@
-/* Which interface of a USB device pad2c reads, from its configuration
+/* Which interface of a USB device padbridge reads, from its configuration
  * descriptor alone (no device needed, so it runs in the tests too). */
-#ifndef PAD2C_USBDESC_H
-#define PAD2C_USBDESC_H
+#ifndef PADBRIDGE_USBDESC_H
+#define PADBRIDGE_USBDESC_H
 
 #include <stddef.h>
 #include <stdint.h>

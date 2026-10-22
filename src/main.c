@@ -1,18 +1,22 @@
-/* pad2c -- the 8BitDo Ultimate 2C 2.4G dongle as a second DualSense on a
- * jailbroken PS5, read over USB (no Bluetooth involved).
+/* padbridge -- USB controllers as virtual DualSense pads on a jailbroken PS5:
+ * the 8BitDo Ultimate 2C 2.4G dongle, the 8BitDo USB Wireless Adapter 2 (and
+ * whatever Bluetooth controller is paired with it) and wired XInput pads,
+ * up to four at once. The console's Bluetooth is never involved.
  *
- *   usbpad.c    the dongle, read from its /dev/ugen node
- *   ps5_vpad.c  the virtual DualSense it drives (from AnyPad PS5, GPL-3.0)
+ *   usbpad.c    each pad, read from its /dev/ugen node
+ *   ps5_vpad.c  the virtual DualSense pads (from AnyPad PS5, GPL-3.0)
+ *   web.c       the settings page, port 8090
  *
- * A virtual pad exists only while the controller is connected to the dongle:
- * it is made on the first controller report and removed when the dongle goes
+ * A virtual pad exists only while its controller is connected: it is made on
+ * the first controller report and removed when the dongle or adapter goes
  * back to "IDLE" (controller off or asleep) or is unplugged.
  *
  * "Turn off" from the console's menu removes the virtual pad, as a DualSense
  * disconnects; Home (PS) brings it back, as it switches a DualSense on.
  *
- * Stop: create /data/pad2c/stop. It also stops by itself before rest mode.
- * Log: /data/pad2c/pad2c.log
+ * Stop: create /data/padbridge/stop. It also stops by itself before rest mode.
+ * Log: /data/padbridge/padbridge.log
+ * Up to 1.1.0 this was pad2c, in /data/pad2c: moved here on the first start.
  */
 #include "host.h"
 #include "lock.h"
@@ -33,11 +37,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#define STATE_DIR  "/data/pad2c"
-#define LOG_PATH   STATE_DIR "/pad2c.log"
-#define LOCK_PATH  STATE_DIR "/pad2c.lock"
+#define STATE_DIR  "/data/padbridge"
+#define LOG_PATH   STATE_DIR "/padbridge.log"
+#define LOCK_PATH  STATE_DIR "/padbridge.lock"
 #define STOP_FLAG  STATE_DIR "/stop"
 #define CONFIG_PATH STATE_DIR "/config"
+#define OLD_DIR    "/data/pad2c"         /* 1.1.0 and before */
 #define T_SCAN     100          /* ms between looks for new pads (the USB Wireless Adapter 2 shows
                                    its XInput identity for under a second) */
 #define T_RESEND   50           /* ms: the last state is sent again at least this often */
@@ -150,15 +155,42 @@ static void ctl_poll(int slot, long now)
     }
 }
 
+/* Up to 1.1.0 this was pad2c. A pad2c still running (from an autoload list)
+ * is asked to stop, so that two do not read the same pads, and its state
+ * (remembered users, settings, log) moves here once. Returns what to log. */
+static const char *from_pad2c(void)
+{
+    struct stat sb;
+    int i, asked = 0;
+
+    if (stat(OLD_DIR, &sb) != 0) return NULL;
+    if (lock_held(OLD_DIR "/pad2c.lock")) {
+        FILE *f = fopen(OLD_DIR "/stop", "w");
+        if (f) fclose(f);
+        for (i = 0; i < 50 && lock_held(OLD_DIR "/pad2c.lock"); i++) usleep(100000);
+        asked = 1;
+    }
+    if (stat(STATE_DIR, &sb) == 0) return asked ? "pad2c was running: asked to stop" : NULL;
+    if (rename(OLD_DIR, STATE_DIR) != 0) return "pad2c's state could not be moved here";
+    unlink(STATE_DIR "/pad2c.lock");
+    unlink(STATE_DIR "/stop");
+    rename(STATE_DIR "/pad2c.log", STATE_DIR "/padbridge.log");
+    rename(STATE_DIR "/pad2c.log.1", STATE_DIR "/padbridge.log.1");
+    return asked ? "pad2c was running: stopped, and its state moved here" : "pad2c's state moved here";
+}
+
 int main(void)
 {
+    const char *moved;
     const char *why = "stop requested";
     long last_scan = -T_SCAN, last_power = 0, last_check = 0;
     int i;
 
+    moved = from_pad2c();
     mkdir(STATE_DIR, 0777);
     log_open(LOG_PATH);
-    log_line("pad2c %s", PAD2C_VERSION);
+    log_line("padbridge %s", PADBRIDGE_VERSION);
+    if (moved) log_line("%s", moved);
     if (!lock_take(LOCK_PATH)) {
         log_line("another instance is running");
         notify("Already running");
@@ -166,7 +198,7 @@ int main(void)
         return 1;
     }
     unlink(STOP_FLAG);
-    syscall(SYS_thr_set_name, -1, "pad2c");
+    syscall(SYS_thr_set_name, -1, "padbridge");
     signal(SIGTERM, on_signal);
     signal(SIGINT, on_signal);
     signal(SIGHUP, on_signal);
@@ -183,9 +215,9 @@ int main(void)
     {
         char ip[32];
         if (web_start(WEB_PORT) && web_local_ip(ip, sizeof ip))
-            notify("Version %s running\nSettings: http://%s:%d", PAD2C_VERSION, ip, WEB_PORT);
+            notify("Version %s running\nSettings: http://%s:%d", PADBRIDGE_VERSION, ip, WEB_PORT);
         else
-            notify("Version %s running\nSwitch the controller on with its dongle plugged in", PAD2C_VERSION);
+            notify("Version %s running\nSwitch the controller on with its dongle plugged in", PADBRIDGE_VERSION);
     }
     for (i = 0; i < HOST_MAX_PADS; i++) pad_state_reset(&g_ctl[i].st);
 
