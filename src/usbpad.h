@@ -2,11 +2,13 @@
  * console's own HID driver (which holds the interface but does nothing with
  * a device it does not know).
  *
- * Today: the 8BitDo 2.4G dongle (2dc8:301c). With no controller it shows up
- * as "8BitDo IDLE" and sends nothing useful; when the controller connects it
- * enumerates again as "8BitDo Ultimate 2C Wireless Controller" and sends
- * report 1 (see usbpad.c). Every re-enumeration ends the open device, so the
- * caller closes it and looks again.
+ * Today: the 8BitDo Ultimate 2C 2.4G dongle (2dc8:301c). With no controller it
+ * shows up as "8BitDo IDLE" and sends nothing useful; when the controller
+ * connects it enumerates again, as "8BitDo Ultimate 2C Wireless Controller"
+ * sending HID report 1 (DInput, map8bitdo.c), or, with the controller in
+ * XInput mode, as 2dc8:310a with an Xbox 360 interface (mapxinput.c). Which
+ * interface is read is chosen in usbdesc.c. Every re-enumeration ends the
+ * open device, so the caller closes it and looks again.
  */
 #ifndef PAD2C_USBPAD_H
 #define PAD2C_USBPAD_H
@@ -27,5 +29,8 @@ const char *usbpad_name(const usbpad *u);
 
 /* The 8BitDo report 1 to a DualSense state. Returns 0 if it is not one. */
 int usbpad_parse_8bitdo(const unsigned char *r, int n, pad_state *st);
+
+/* An XInput (Xbox 360) input report to a DualSense state. 0 if it is not one. */
+int usbpad_parse_xinput(const unsigned char *r, int n, pad_state *st);
 
 #endif

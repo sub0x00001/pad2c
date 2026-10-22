@@ -60,11 +60,17 @@ or Payload Manager; it does not jailbreak anything itself.
 | | |
 |---|---|
 | Tested on | PS5 Slim (CFI-2114), firmware **13.60**, elfldr 0.26, kstuff-lite 1.11, Payload Manager 0.5.2 |
-| Controller | 8BitDo Ultimate 2C Wireless, 2.4G dongle (`2dc8:301c`) |
+| Controller | 8BitDo Ultimate 2C Wireless, 2.4G dongle, DInput (`2dc8:301c`) and XInput (`2dc8:310a`) modes |
 | Works | all buttons, sticks, analog triggers, d-pad, Home = PS, console menus and games, sleep and wake, the console's "who is using this controller" screen, remembers its user, "turn off" from the console's menu |
 | Not yet | vibration, light bar, motion sensors, audio |
 
 Other firmwares and console models are untested.
+
+The controller has two modes on its dongle, both work. It keeps the one last chosen:
+
+- **DInput** (the default): with the controller on, hold **B + Home** until it switches off, then **B + Home** again
+  until it switches on.
+- **XInput** (seen by a PC as an Xbox controller): the same with **X + Home**. L4/R4 send nothing in this mode.
 
 Notes:
 
@@ -108,9 +114,11 @@ Files, all in `/data/pad2c/`:
 
 - `src/usbpad.c` opens the dongle's `/dev/ugenB.A` node and reads its interrupt IN endpoint. The console's own HID
   driver holds the interface but ignores the device. The internal Bluetooth chip (`ugen0.2`) is never touched.
-- With no controller the dongle shows up as "8BitDo IDLE". When the controller connects, the dongle enumerates again
-  and sends report 1. `src/map8bitdo.c` turns that report into DualSense buttons (`make test` checks it against
-  reports captured on a console). When the controller sleeps, the dongle enumerates again and the open device ends.
+- With no controller the dongle shows up as "8BitDo IDLE". When the controller connects, the dongle enumerates again:
+  in DInput mode it sends HID report 1, turned into DualSense buttons by `src/map8bitdo.c`; in XInput mode it becomes
+  `2dc8:310a` with an Xbox 360 interface, read by `src/mapxinput.c`. `src/usbdesc.c` picks the interface from the
+  USB descriptor (XInput first, then the 8BitDo HID, never a keyboard). `make test` checks both against reports and
+  descriptors captured on consoles. When the controller sleeps, the dongle enumerates again and the open device ends.
 - `src/ps5_vpad.c` creates the virtual DualSense (`scePadVirtualDevice*`), finds its device id in the kernel log,
   gives it to a user (`sceMbusBindDeviceWithUserId`) and feeds it. It follows the kernel log while running: the
   console's choice of user is remembered, and its "turn off" (`sceMbusDisconnectDevice`) removes the virtual pad.
@@ -119,11 +127,12 @@ Files, all in `/data/pad2c/`:
 
 ## Build
 
-Needs [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk) and clang, lld and llvm (Linux or WSL):
+Needs [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk) and clang, lld and llvm. `tools/setup-wsl.sh`
+(Linux or WSL) or `tools/setup-macos.sh` (Homebrew) installs them and writes `~/.ps5sdk`:
 
 ```
-export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
-make test     # the button map, on the PC
+. ~/.ps5sdk
+make test     # the button maps and the interface choice, on the PC
 make          # dist/pad2c-<version>.elf and dist/pad2c-probe.elf
 ```
 
