@@ -44,19 +44,10 @@ controller with it, switch the controller on: nothing to set on the adapter.
 |---|---|
 | 2.4G dongle, DInput mode (`2dc8:301c`) | ✅ all buttons, L4/R4 as the touchpad click |
 | 2.4G dongle, XInput mode (`2dc8:310a`) | ✅ all buttons except L4/R4 (the controller does not send them in this mode) |
-| USB cable (`2dc8:310a`, XInput) | ✅ all buttons except L4/R4, in the USB-A and USB-C ports |
+| USB cable (`2dc8:310a`, XInput) | ✅ all buttons except L4/R4 |
 
 The 8BitDo Ultimate 2C **Bluetooth** Controller (the Switch edition, without a dongle) is a different product and is
 not supported directly; it works through the USB Wireless Adapter 2.
-
-### On a USB cable
-
-| Controller | Result |
-|---|---|
-| 8BitDo Ultimate 2C Wireless | ✅ see above |
-| Other wired XInput (Xbox 360 protocol) controllers | expected to work, untested: please report |
-
-Cables, dongles and the adapter work in the console's **USB-A** and **USB-C** ports alike.
 
 ### Not yet
 
