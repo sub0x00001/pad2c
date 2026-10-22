@@ -3,6 +3,7 @@
 #ifndef PAD2C_USBDESC_H
 #define PAD2C_USBDESC_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #define VID_8BITDO 0x2DC8
@@ -26,5 +27,9 @@ typedef struct {
  *      mouse (the 8BitDo 310a receiver also has a keyboard interface).
  * Each needs an interrupt IN endpoint. Returns the kind, USBPAD_NONE if none. */
 int usbdesc_choose(const unsigned char *cfg, int len, uint16_t vid, usbdesc_pick *out);
+
+/* A string descriptor (UTF-16LE) as ASCII, '?' for anything else, trailing
+ * spaces dropped, cut to fit `size`. 0 if it is not one or is blank. */
+int usbdesc_string(const unsigned char *d, int len, char *out, size_t size);
 
 #endif

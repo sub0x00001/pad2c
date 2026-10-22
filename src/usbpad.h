@@ -25,7 +25,8 @@ usbpad *usbpad_open(void);
 int usbpad_poll(usbpad *u, pad_state *st);
 
 void usbpad_close(usbpad *u);
-const char *usbpad_name(const usbpad *u);
+const char *usbpad_name(const usbpad *u);     /* the product, as the device names itself */
+const char *usbpad_mode(const usbpad *u);     /* "DInput" or "XInput" */
 
 /* The 8BitDo report 1 to a DualSense state. Returns 0 if it is not one. */
 int usbpad_parse_8bitdo(const unsigned char *r, int n, pad_state *st);

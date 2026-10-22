@@ -6,6 +6,9 @@
   now picks the interface from the descriptor: XInput first, from any vendor, then on an 8BitDo the first HID that is
   not a boot keyboard or mouse. XInput reports are mapped like the DualSense layout, and the player LED is set as a
   PC does. L4/R4 send nothing in XInput mode.
+- Notifications: every one starts with "pad2c by Sub", then what happened, all in English, e.g.
+  "8BitDo Ultimate 2C Wireless Controller (XInput) connected". The name is the controller's own, read from its USB
+  string descriptor (`USB_GET_DEVICEINFO` fails on the dongle), and the mode is DInput or XInput.
 - `tools/setup-macos.sh`: builds on macOS with Homebrew LLVM.
 
 ## 0.2.1

@@ -72,3 +72,21 @@ int usbdesc_choose(const unsigned char *cfg, int len, uint16_t vid, usbdesc_pick
             if (is_pad_hid(&ifs[i]) && ifs[i].ep_in) return pick(&ifs[i], USBPAD_8BITDO, out);
     return USBPAD_NONE;
 }
+
+int usbdesc_string(const unsigned char *d, int len, char *out, size_t size)
+{
+    size_t n = 0;
+    int i;
+
+    if (size == 0) return 0;
+    out[0] = 0;
+    if (len < 2 || d[1] != 0x03) return 0;
+    if (d[0] < len) len = d[0];
+    for (i = 2; i + 1 < len && n + 1 < size; i += 2) {
+        unsigned c = d[i] | (unsigned)d[i + 1] << 8;
+        out[n++] = (char)(c >= 0x20 && c < 0x7F ? c : '?');
+    }
+    while (n > 0 && out[n - 1] == ' ') n--;
+    out[n] = 0;
+    return n > 0;
+}

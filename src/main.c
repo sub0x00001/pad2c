@@ -58,13 +58,14 @@ int main(void)
     int vpad_made = 0;          /* a virtual pad was asked for and not removed since */
     int turned_off = 0;         /* the console turned it off: Home brings it back */
     int ps_latch = 0;           /* PS (Home) held since before: not a new press */
+    char model[80] = "Controller";  /* "<name> (<mode>)" of the last controller, for the notifications */
 
     mkdir(STATE_DIR, 0777);
     log_open(LOG_PATH);
     log_line("pad2c %s", PAD2C_VERSION);
     if (!lock_take(LOCK_PATH)) {
         log_line("another instance is running");
-        notify("pad2c is already running");
+        notify("Already running");
         log_close();
         return 1;
     }
@@ -77,12 +78,12 @@ int main(void)
 
     if (!vpad_init()) {
         log_line("virtual pads not available; stopping");
-        notify("pad2c %s: cannot create a virtual DualSense (see %s)", PAD2C_VERSION, LOG_PATH);
+        notify("Cannot create a virtual DualSense\nSee %s", LOG_PATH);
         lock_release();
         log_close();
         return 1;
     }
-    notify("pad2c %s running\nSwitch the 8BitDo on (2.4G mode) with its dongle plugged in", PAD2C_VERSION);
+    notify("Version %s running\nSwitch the controller on with its dongle plugged in", PAD2C_VERSION);
     pad_state_reset(&st);
 
     while (!g_stop) {
@@ -102,7 +103,7 @@ int main(void)
                     vpad_remove(SLOT);
                     vpad_made = 0;
                     log_line("controller left");
-                    notify("pad2c: 8BitDo disconnected");
+                    notify("%s disconnected", model);
                 }
                 turned_off = 0;             /* switched off for real: it starts afresh */
                 pad_state_reset(&st);
@@ -119,9 +120,10 @@ int main(void)
                     }
                 } else if (!vpad_made) {
                     vpad_made = vpad_add(SLOT);
-                    log_line("controller connected (%s), virtual pad %s", usbpad_name(pad),
+                    snprintf(model, sizeof model, "%s (%s)", usbpad_name(pad), usbpad_mode(pad));
+                    log_line("controller connected: %s, virtual pad %s", model,
                              vpad_made ? "requested" : "refused");
-                    notify("pad2c: 8BitDo connected");
+                    notify("%s connected", model);
                 }
                 if (ps_latch) st.buttons &= ~(uint32_t)PAD_PS;
                 if (vpad_made) vpad_update(SLOT, &st);
@@ -141,7 +143,7 @@ int main(void)
             turned_off = 1;
             ps_latch = (st.buttons & PAD_PS) != 0;
             log_line("virtual pad turned off; waiting for PS (Home)");
-            notify("pad2c: 8BitDo turned off\nPress Home on the controller to turn it back on");
+            notify("%s turned off\nPress Home to turn it back on", model);
         }
 
         if (now - last_power >= 200) {
@@ -170,6 +172,6 @@ int main(void)
     lock_release();
     log_line("stopped");
     log_close();
-    notify("pad2c stopped (%s)", why);
+    notify("Stopped (%s)", why);
     return 0;
 }

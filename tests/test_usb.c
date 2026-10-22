@@ -6,6 +6,7 @@
 #include "usbpad.h"
 
 #include <stdio.h>
+#include <string.h>
 
 static int fails;
 
@@ -129,8 +130,25 @@ static void test_xinput(void)
     CHECK(!usbpad_parse_xinput(r, 13, &st), "short report taken");
 }
 
+static void test_string(void)
+{
+    /* string descriptor: length, type 3, UTF-16LE */
+    static const unsigned char name[] = { 22, 3, '8', 0, 'B', 0, 'i', 0, 't', 0, 'D', 0, 'o', 0, ' ', 0,
+                                          '2', 0, 'C', 0, ' ', 0 };
+    static const unsigned char odd[] = { 8, 3, 'A', 0, 0xE9, 0, 0x3A, 0x26 };
+    char s[64];
+
+    CHECK(usbdesc_string(name, sizeof name, s, sizeof s) && !strcmp(s, "8BitDo 2C"), "string \"%s\"", s);
+    CHECK(usbdesc_string(odd, sizeof odd, s, sizeof s) && !strcmp(s, "A??"), "non-ASCII \"%s\"", s);
+    CHECK(usbdesc_string(name, sizeof name, s, 5) && !strcmp(s, "8Bit"), "cut \"%s\"", s);
+    CHECK(!usbdesc_string(name, 1, s, sizeof s), "1 byte taken");
+    CHECK(!usbdesc_string((const unsigned char[]){ 4, 2, 'A', 0 }, 4, s, sizeof s), "not a string taken");
+    CHECK(!usbdesc_string((const unsigned char[]){ 4, 3, ' ', 0 }, 4, s, sizeof s), "blank taken");
+}
+
 int main(void)
 {
+    test_string();
     test_choose();
     test_xinput();
     printf("%s (%d failure(s))\n", fails ? "FAILED" : "all passed", fails);

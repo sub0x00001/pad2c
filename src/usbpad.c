@@ -84,6 +84,26 @@ static int send_out(usbpad *u, const unsigned char *data, int n)
     return 0;
 }
 
+/* String descriptor `index` (US English), as ASCII. A standard GET_DESCRIPTOR. */
+static int read_string(int fd, int index, char *out, size_t size)
+{
+    struct usb_ctl_request req;
+    unsigned char buf[255];
+
+    if (index == 0) return 0;
+    memset(&req, 0, sizeof req);
+    memset(buf, 0, sizeof buf);
+    req.ucr_data = buf;
+    req.ucr_flags = 0x0004;                     /* USB_SHORT_XFER_OK (usbdi.h, kernel-only header) */
+    req.ucr_request.bmRequestType = UT_READ_DEVICE;
+    req.ucr_request.bRequest = UR_GET_DESCRIPTOR;
+    USETW(req.ucr_request.wValue, 0x0300 | index);
+    USETW(req.ucr_request.wIndex, 0x0409);
+    USETW(req.ucr_request.wLength, sizeof buf);
+    if (ioctl(fd, USB_DO_REQUEST, &req) != 0) return 0;
+    return usbdesc_string(buf, req.ucr_actlen, out, size);
+}
+
 static int start_read(usbpad *u, int i)
 {
     struct usb_fs_start st;
@@ -101,7 +121,7 @@ static int start_read(usbpad *u, int i)
 
 static usbpad *try_node(int bus, int addr)
 {
-    static const char *kinds[] = { "", "8BitDo HID", "XInput" };
+    static const char *kinds[] = { "", "8BitDo HID (DInput)", "XInput" };
     struct usb_device_descriptor dd;
     struct usb_device_info di;
     struct usb_fs_init init;
@@ -126,12 +146,15 @@ static usbpad *try_node(int bus, int addr)
         if (u->mps_out > RD_MAX) u->mps_out = RD_MAX;
     }
 
+    /* The product name: USB_GET_DEVICEINFO fails on the 8BitDo dongle, the
+     * string descriptor itself does not. */
     memset(&di, 0, sizeof di);
-    if (ioctl(u->fd, USB_GET_DEVICEINFO, &di) == 0 && di.udi_product[0])
-        snprintf(u->name, sizeof u->name, "%.60s", di.udi_product);
-    else
-        snprintf(u->name, sizeof u->name, "%s %04x:%04x", UGETW(dd.idVendor) == VID_8BITDO ? "8BitDo" : "USB pad",
-                 UGETW(dd.idVendor), UGETW(dd.idProduct));
+    if (!read_string(u->fd, dd.iProduct, u->name, sizeof u->name)) {
+        if (ioctl(u->fd, USB_GET_DEVICEINFO, &di) == 0 && di.udi_product[0])
+            snprintf(u->name, sizeof u->name, "%.60s", di.udi_product);
+        else
+            snprintf(u->name, sizeof u->name, "%s", UGETW(dd.idVendor) == VID_8BITDO ? "8BitDo" : "USB controller");
+    }
 
     for (i = 0; i <= N_RD; i++) {
         u->bufp[i][0] = u->buf[i];
@@ -208,7 +231,12 @@ usbpad *usbpad_open(void)
 
 const char *usbpad_name(const usbpad *u)
 {
-    return u && u->name[0] ? u->name : "USB pad";
+    return u && u->name[0] ? u->name : "USB controller";
+}
+
+const char *usbpad_mode(const usbpad *u)
+{
+    return u && u->kind == USBPAD_XINPUT ? "XInput" : "DInput";
 }
 
 int usbpad_poll(usbpad *u, pad_state *st)
