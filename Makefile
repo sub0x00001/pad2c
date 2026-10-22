@@ -11,6 +11,8 @@ test:
 	@mkdir -p build
 	cc -std=c11 -Wall -Wextra -Werror -Isrc -o build/test_map src/map8bitdo.c tests/test_map.c
 	./build/test_map
+	cc -std=c11 -Wall -Wextra -Werror -Isrc -o build/test_usb src/usbdesc.c src/mapxinput.c tests/test_usb.c
+	./build/test_usb
 
 ifdef PS5_PAYLOAD_SDK
 include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
@@ -19,7 +21,7 @@ endif
 CFLAGS := -std=gnu11 -Wall -Wextra -O2 -Isrc
 LDLIBS := -lScePad -lSceUserService -ldl
 
-SRCS := src/main.c src/usbpad.c src/map8bitdo.c src/ps5_vpad.c src/ps5_power.c src/lock.c src/log.c src/util.c
+SRCS := src/main.c src/usbpad.c src/usbdesc.c src/map8bitdo.c src/mapxinput.c src/ps5_vpad.c src/ps5_power.c src/lock.c src/log.c src/util.c
 
 dist/pad2c-$(VERSION).elf: $(SRCS) $(wildcard src/*.h)
 	@mkdir -p dist

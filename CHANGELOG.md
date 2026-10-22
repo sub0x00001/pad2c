@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0
+- The Ultimate 2C receiver in XInput mode works (issue #2). When the controller connects, that receiver enumerates
+  as `2dc8:310a` with an XInput interface (`ff/5d/01`), a keyboard and a vendor HID; 0.2.1 read the keyboard. pad2c
+  now picks the interface from the descriptor: XInput first, from any vendor, then on an 8BitDo the first HID that is
+  not a boot keyboard or mouse. XInput reports are mapped like the DualSense layout, and the player LED is set as a
+  PC does. L4/R4 send nothing in XInput mode.
+- Notifications: every one starts with "pad2c by Sub", then what happened, all in English, e.g.
+  "8BitDo Ultimate 2C Wireless Controller (XInput) connected". The name is the controller's own, read from its USB
+  string descriptor (`USB_GET_DEVICEINFO` fails on the dongle), and the mode is DInput or XInput.
+- `tools/setup-macos.sh`: builds on macOS with Homebrew LLVM.
+
 ## 0.2.1
 - "Turn off" in the console's menu works: the console calls `sceMbusDisconnectDevice` on the pad, which does nothing
   to a virtual one (it stayed on, and the menu then showed it as a generic "Accessories" device). pad2c now removes

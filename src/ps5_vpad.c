@@ -2,6 +2,7 @@
 #include "host.h"
 #include "log.h"
 #include "util.h"
+#include "version.h"
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -177,12 +178,15 @@ static size_t g_line_len;
 
 void notify(const char *fmt, ...)
 {
+    /* Every notification: "pad2c by <author>", then what happened. */
+    static const char head[] = "pad2c by " PAD2C_AUTHOR "\n";
     notify_request req;
     va_list ap;
 
     memset(&req, 0, sizeof req);
+    memcpy(req.message, head, sizeof head);
     va_start(ap, fmt);
-    vsnprintf(req.message, sizeof req.message, fmt, ap);
+    vsnprintf(req.message + sizeof head - 1, sizeof req.message - (sizeof head - 1), fmt, ap);
     va_end(ap);
     sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
 }
