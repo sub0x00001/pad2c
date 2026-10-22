@@ -17,13 +17,22 @@ static int is_xinput(const iface *f)
 }
 
 /* HID, but not a boot keyboard (1/1) or mouse (1/2). */
-static int is_pad_hid(const iface *f)
+static int is_boot_kbd_mouse(const iface *f)
 {
-    return f->cls == 0x03 && !(f->sub == 0x01 && (f->proto == 0x01 || f->proto == 0x02));
+    return f->cls == 0x03 && f->sub == 0x01 && (f->proto == 0x01 || f->proto == 0x02);
 }
 
-static int pick(const iface *f, int kind, usbdesc_pick *out)
+static int is_pad_hid(const iface *f)
 {
+    return f->cls == 0x03 && !is_boot_kbd_mouse(f);
+}
+
+static int pick(const iface *ifs, int n, const iface *f, int kind, usbdesc_pick *out)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+        if (is_boot_kbd_mouse(&ifs[i]) && ifs[i].num < 32) out->hide |= 1u << ifs[i].num;
     out->kind = kind;
     out->iface = f->num;
     out->ep_in = f->ep_in;
@@ -66,10 +75,10 @@ int usbdesc_choose(const unsigned char *cfg, int len, uint16_t vid, usbdesc_pick
     }
 
     for (i = 0; i < n; i++)
-        if (is_xinput(&ifs[i]) && ifs[i].ep_in) return pick(&ifs[i], USBPAD_XINPUT, out);
+        if (is_xinput(&ifs[i]) && ifs[i].ep_in) return pick(ifs, n, &ifs[i], USBPAD_XINPUT, out);
     if (vid == VID_8BITDO)
         for (i = 0; i < n; i++)
-            if (is_pad_hid(&ifs[i]) && ifs[i].ep_in) return pick(&ifs[i], USBPAD_8BITDO, out);
+            if (is_pad_hid(&ifs[i]) && ifs[i].ep_in) return pick(ifs, n, &ifs[i], USBPAD_8BITDO, out);
     return USBPAD_NONE;
 }
 
@@ -89,4 +98,14 @@ int usbdesc_string(const unsigned char *d, int len, char *out, size_t size)
     while (n > 0 && out[n - 1] == ' ') n--;
     out[n] = 0;
     return n > 0;
+}
+
+const char *usbdesc_known_name(uint16_t vid, uint16_t pid, const char *manufacturer)
+{
+    static const char adapter2[] = "8BitDo USB Wireless Adapter 2";
+    int by_8bitdo = manufacturer && !strcmp(manufacturer, "8BitDo");
+
+    if (vid == VID_8BITDO && (pid == 0x3105 || pid == 0x3106 || pid == 0x3107)) return adapter2;
+    if (vid == 0x045E && pid == 0x028E && by_8bitdo) return adapter2;   /* its Xbox 360 identity */
+    return NULL;
 }

@@ -14,6 +14,7 @@
  * Stop: create /data/pad2c/stop. It also stops by itself before rest mode.
  * Log: /data/pad2c/pad2c.log
  */
+#include "host.h"
 #include "lock.h"
 #include "log.h"
 #include "ps5_power.h"
@@ -34,8 +35,8 @@
 #define LOG_PATH   STATE_DIR "/pad2c.log"
 #define LOCK_PATH  STATE_DIR "/pad2c.lock"
 #define STOP_FLAG  STATE_DIR "/stop"
-#define SLOT       0
-#define T_SCAN     1000         /* ms between looks for the dongle */
+#define T_SCAN     100          /* ms between looks for new pads (the USB Wireless Adapter 2 shows
+                                   its XInput identity for under a second) */
 #define T_RESEND   50           /* ms: the last state is sent again at least this often */
 /* No silence timeout: the dongle only reports changes, so a pad held still is
  * silent. When the controller sleeps or switches off, the dongle enumerates
@@ -49,16 +50,67 @@ static void on_signal(int sig)
     g_stop = 1;
 }
 
+/* One USB pad and the virtual DualSense it drives: slot i of ps5_vpad.c. */
+typedef struct {
+    usbpad *pad;
+    pad_state st;
+    long last_sent;
+    int vpad_made;              /* a virtual pad was asked for and not removed since */
+    int turned_off;             /* the console turned it off: Home brings it back */
+    int ps_latch;               /* PS (Home) held since before: not a new press */
+    char model[80];             /* "<name> (<mode>)", for the notifications */
+} ctl;
+
+static ctl g_ctl[HOST_MAX_PADS];
+
+static void ctl_poll(int slot, long now)
+{
+    ctl *c = &g_ctl[slot];
+    int r = usbpad_poll(c->pad, &c->st);
+
+    if (r < 0) {
+        usbpad_close(c->pad);
+        c->pad = NULL;
+        if (c->vpad_made) {
+            vpad_remove(slot);
+            c->vpad_made = 0;
+            log_line("slot %d: controller left", slot);
+            notify("%s disconnected", c->model);
+        }
+        c->turned_off = 0;              /* switched off for real: it starts afresh */
+        pad_state_reset(&c->st);
+    } else if (r > 0) {
+        int ps_new = (c->st.buttons & PAD_PS) && !c->ps_latch;
+
+        if (!(c->st.buttons & PAD_PS)) c->ps_latch = 0;
+        if (!c->vpad_made && c->turned_off) {
+            if (ps_new) {               /* that press only switches it on: not passed on */
+                c->vpad_made = vpad_add(slot);
+                c->turned_off = 0;
+                c->ps_latch = 1;
+                log_line("slot %d: PS pressed: virtual pad back on", slot);
+            }
+        } else if (!c->vpad_made) {
+            c->vpad_made = vpad_add(slot);
+            snprintf(c->model, sizeof c->model, "%s (%s)", usbpad_name(c->pad), usbpad_mode(c->pad));
+            log_line("slot %d: controller connected: %s, virtual pad %s", slot, c->model,
+                     c->vpad_made ? "requested" : "refused");
+            notify("%s connected", c->model);
+        }
+        if (c->ps_latch) c->st.buttons &= ~(uint32_t)PAD_PS;
+        if (c->vpad_made) vpad_update(slot, &c->st);
+        c->last_sent = now;
+    } else if (c->vpad_made && now - c->last_sent >= T_RESEND) {
+        vpad_update(slot, &c->st);      /* keep the pad fed while nothing changes */
+        c->last_sent = now;
+    }
+}
+
 int main(void)
 {
-    usbpad *pad = NULL;
-    pad_state st;
     const char *why = "stop requested";
-    long last_scan = -T_SCAN, last_power = 0, last_check = 0, last_sent = 0;
-    int vpad_made = 0;          /* a virtual pad was asked for and not removed since */
-    int turned_off = 0;         /* the console turned it off: Home brings it back */
-    int ps_latch = 0;           /* PS (Home) held since before: not a new press */
-    char model[80] = "Controller";  /* "<name> (<mode>)" of the last controller, for the notifications */
+    long last_scan = -T_SCAN, last_power = 0, last_check = 0;
+    int i;
 
     mkdir(STATE_DIR, 0777);
     log_open(LOG_PATH);
@@ -84,66 +136,38 @@ int main(void)
         return 1;
     }
     notify("Version %s running\nSwitch the controller on with its dongle plugged in", PAD2C_VERSION);
-    pad_state_reset(&st);
+    for (i = 0; i < HOST_MAX_PADS; i++) pad_state_reset(&g_ctl[i].st);
 
     while (!g_stop) {
         long now = now_ms();
-        int r = 0;
 
-        if (!pad && now - last_scan >= T_SCAN) {
+        /* New pads, while a slot is free: each gets the first free one. */
+        if (now - last_scan >= T_SCAN) {
             last_scan = now;
-            pad = usbpad_open();
-        }
-        if (pad) {
-            r = usbpad_poll(pad, &st);
-            if (r < 0) {
-                usbpad_close(pad);
-                pad = NULL;
-                if (vpad_made) {
-                    vpad_remove(SLOT);
-                    vpad_made = 0;
-                    log_line("controller left");
-                    notify("%s disconnected", model);
+            for (i = 0; i < HOST_MAX_PADS; i++) {
+                if (g_ctl[i].pad || g_ctl[i].vpad_made) continue;
+                if ((g_ctl[i].pad = usbpad_open())) {
+                    g_ctl[i].turned_off = 0;
+                    log_line("slot %d: %s", i, usbpad_name(g_ctl[i].pad));
                 }
-                turned_off = 0;             /* switched off for real: it starts afresh */
-                pad_state_reset(&st);
-            } else if (r > 0) {
-                int ps_new = (st.buttons & PAD_PS) && !ps_latch;
-
-                if (!(st.buttons & PAD_PS)) ps_latch = 0;
-                if (!vpad_made && turned_off) {
-                    if (ps_new) {           /* that press only switches it on: not passed on */
-                        vpad_made = vpad_add(SLOT);
-                        turned_off = 0;
-                        ps_latch = 1;
-                        log_line("PS pressed: virtual pad back on");
-                    }
-                } else if (!vpad_made) {
-                    vpad_made = vpad_add(SLOT);
-                    snprintf(model, sizeof model, "%s (%s)", usbpad_name(pad), usbpad_mode(pad));
-                    log_line("controller connected: %s, virtual pad %s", model,
-                             vpad_made ? "requested" : "refused");
-                    notify("%s connected", model);
-                }
-                if (ps_latch) st.buttons &= ~(uint32_t)PAD_PS;
-                if (vpad_made) vpad_update(SLOT, &st);
-                last_sent = now;
-            } else if (vpad_made && now - last_sent >= T_RESEND) {
-                vpad_update(SLOT, &st);     /* keep the pad fed while nothing changes */
-                last_sent = now;
+                break;
             }
         }
+        for (i = 0; i < HOST_MAX_PADS; i++)
+            if (g_ctl[i].pad) ctl_poll(i, now);
         vpad_poll(now);
 
         /* Turned off from the console's menu (or the console dropped it): the
          * virtual pad goes away, as a DualSense disconnects. */
-        if (vpad_made && vpad_off(SLOT)) {
-            vpad_remove(SLOT);
-            vpad_made = 0;
-            turned_off = 1;
-            ps_latch = (st.buttons & PAD_PS) != 0;
-            log_line("virtual pad turned off; waiting for PS (Home)");
-            notify("%s turned off\nPress Home to turn it back on", model);
+        for (i = 0; i < HOST_MAX_PADS; i++) {
+            ctl *c = &g_ctl[i];
+            if (!c->vpad_made || !vpad_off(i)) continue;
+            vpad_remove(i);
+            c->vpad_made = 0;
+            c->turned_off = 1;
+            c->ps_latch = (c->st.buttons & PAD_PS) != 0;
+            log_line("slot %d: virtual pad turned off; waiting for PS (Home)", i);
+            notify("%s turned off\nPress Home to turn it back on", c->model);
         }
 
         if (now - last_power >= 200) {
@@ -161,12 +185,14 @@ int main(void)
                 break;
             }
         }
-        if (r <= 0) usleep(2000);
+        usleep(2000);
     }
 
     log_line("stopping: %s", why);
-    if (vpad_made) vpad_remove(SLOT);
-    usbpad_close(pad);
+    for (i = 0; i < HOST_MAX_PADS; i++) {
+        if (g_ctl[i].vpad_made) vpad_remove(i);
+        usbpad_close(g_ctl[i].pad);
+    }
     vpad_shutdown();
     vpad_creds_restore();
     lock_release();

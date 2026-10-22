@@ -27,9 +27,9 @@ dist/pad2c-$(VERSION).elf: $(SRCS) $(wildcard src/*.h)
 	@mkdir -p dist
 	$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
 
-dist/pad2c-probe.elf: src/probe.c
+dist/pad2c-probe.elf: src/probe.c src/usbdesc.c src/usbdesc.h
 	@mkdir -p dist
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ src/probe.c src/usbdesc.c
 
 clean:
 	rm -rf dist build

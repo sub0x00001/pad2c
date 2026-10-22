@@ -4,6 +4,7 @@
 #include "util.h"
 
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 
 #include <dev/usb/usb.h>
@@ -20,9 +21,20 @@
 #define EP_OUT      N_RD        /* transfer index of the OUT endpoint, if any */
 #define RD_MAX      64
 #define T_ALIVE     1000        /* ms between checks that the device is still there */
+#define N_BUS       4
+#define N_ADDR      16
+
+/* Per /dev/ugenB.A: held by an open usbpad, or looked at and not a pad. A
+ * node not a pad is not opened again until it changes (a device enumerating
+ * anew gets a new node), so the scan can run often: the USB Wireless
+ * Adapter 2 shows its XInput identity for under a second. */
+static unsigned char g_held[N_BUS][N_ADDR];
+static struct { ino_t ino; long ctime, seen; unsigned char set; } g_not_pad[N_BUS][N_ADDR];
+#define T_NOT_PAD   2000        /* ms a node found not to be a pad is left alone, unless it changes */
 
 struct usbpad {
     int fd;
+    int bus, addr;
     char path[24];
     char name[64];
     int kind;                   /* USBPAD_* (usbdesc.h) */
@@ -84,6 +96,40 @@ static int send_out(usbpad *u, const unsigned char *data, int n)
     return 0;
 }
 
+/* A control transfer from the device; the bytes read, -1 if it failed. */
+static int ctrl_in(int fd, int type, int req, int value, int index, unsigned char *buf, int len)
+{
+    struct usb_ctl_request r;
+
+    memset(&r, 0, sizeof r);
+    r.ucr_data = buf;
+    r.ucr_flags = 0x0004;                       /* USB_SHORT_XFER_OK (usbdi.h, kernel-only header) */
+    r.ucr_request.bmRequestType = (uint8_t)type;
+    r.ucr_request.bRequest = (uint8_t)req;
+    USETW(r.ucr_request.wValue, value);
+    USETW(r.ucr_request.wIndex, index);
+    USETW(r.ucr_request.wLength, len);
+    if (ioctl(fd, USB_DO_REQUEST, &r) != 0) return -1;
+    return r.ucr_actlen;
+}
+
+/* What Windows asks of an XInput device when it arrives: the Microsoft OS
+ * string descriptor (0xEE) and the XUSB driver's vendor request. The USB
+ * Wireless Adapter 2 picks its mode from the host it sees ("automatic mode
+ * switch supports Windows and Switch"): answered like this, it stays in
+ * XInput on its own. Pads that do not know them refuse, which is harmless. */
+static void xinput_windows_hello(usbpad *u)
+{
+    unsigned char buf[64];
+    int os, xusb;
+
+    memset(buf, 0, sizeof buf);
+    os = ctrl_in(u->fd, UT_READ_DEVICE, UR_GET_DESCRIPTOR, 0x03EE, 0, buf, 18);
+    memset(buf, 0, sizeof buf);
+    xusb = ctrl_in(u->fd, 0xC1, 0x01, 0x0100, 0x0000, buf, 20);
+    log_line("usb: %s: Windows hello: OS string %d, XUSB request %d", u->path, os, xusb);
+}
+
 /* String descriptor `index` (US English), as ASCII. A standard GET_DESCRIPTOR. */
 static int read_string(int fd, int index, char *out, size_t size)
 {
@@ -119,24 +165,33 @@ static int start_read(usbpad *u, int i)
     return 1;
 }
 
-static usbpad *try_node(int bus, int addr)
+/* *not_pad: set when the device answered and is not a pad (as opposed to a
+ * failure on the way, which is tried again). */
+static usbpad *try_node(int bus, int addr, int *not_pad)
 {
     static const char *kinds[] = { "", "8BitDo HID (DInput)", "XInput" };
     struct usb_device_descriptor dd;
     struct usb_device_info di;
     struct usb_fs_init init;
     usbdesc_pick pick;
+    char maker[32] = "";
+    const char *known;
     usbpad *u;
     int i;
 
     u = calloc(1, sizeof *u);
     if (!u) return NULL;
+    u->bus = bus;
+    u->addr = addr;
     snprintf(u->path, sizeof u->path, "/dev/ugen%d.%d", bus, addr);
     u->fd = open(u->path, O_RDWR);
     if (u->fd < 0) goto fail;
     if (ioctl(u->fd, USB_GET_DEVICE_DESC, &dd) != 0) goto fail;
     u->kind = choose_interface(u->fd, UGETW(dd.idVendor), &pick);
-    if (u->kind == USBPAD_NONE) goto fail;
+    if (u->kind == USBPAD_NONE) {
+        *not_pad = 1;
+        goto fail;
+    }
     u->ep_in = pick.ep_in;
     u->mps = pick.mps_in;
     if (u->mps == 0 || u->mps > RD_MAX) u->mps = RD_MAX;
@@ -147,9 +202,12 @@ static usbpad *try_node(int bus, int addr)
     }
 
     /* The product name: USB_GET_DEVICEINFO fails on the 8BitDo dongle, the
-     * string descriptor itself does not. */
+     * string descriptor itself does not. A name known for its id wins. */
     memset(&di, 0, sizeof di);
-    if (!read_string(u->fd, dd.iProduct, u->name, sizeof u->name)) {
+    read_string(u->fd, dd.iManufacturer, maker, sizeof maker);
+    if ((known = usbdesc_known_name(UGETW(dd.idVendor), UGETW(dd.idProduct), maker)))
+        snprintf(u->name, sizeof u->name, "%s", known);
+    else if (!read_string(u->fd, dd.iProduct, u->name, sizeof u->name)) {
         if (ioctl(u->fd, USB_GET_DEVICEINFO, &di) == 0 && di.udi_product[0])
             snprintf(u->name, sizeof u->name, "%.60s", di.udi_product);
         else
@@ -199,12 +257,23 @@ static usbpad *try_node(int bus, int addr)
     u->t_alive = now_ms();
     log_line("usb: %s %04x:%04x \"%s\", %s interface %u, reading endpoint %#x (%u bytes)", u->path,
              UGETW(dd.idVendor), UGETW(dd.idProduct), u->name, kinds[u->kind], pick.iface, u->ep_in, u->mps);
+    /* A keyboard or mouse beside the pad (the USB Wireless Adapter 2's macros
+     * in XInput mode): the console's own driver lets go of it, so the console
+     * does not list a keyboard and a mouse among its accessories. */
+    for (i = 0; i < 32; i++)
+        if (pick.hide & (1u << i)) {
+            int n = i;
+            log_line("usb: %s: interface %d (keyboard/mouse) hidden from the console: %s", u->path, i,
+                     ioctl(u->fd, USB_IFACE_DRIVER_DETACH, &n) == 0 ? "ok" : "failed");
+        }
     if (u->kind == USBPAD_XINPUT) {
+        xinput_windows_hello(u);
         /* The LED of player 1, as a PC sets it: some XInput pads report only after it. */
         static const unsigned char led[3] = { 0x01, 0x03, 0x06 };
         log_line("usb: %s: XInput LED %s", u->path,
                  !u->ep_out ? "not sent (no OUT endpoint)" : send_out(u, led, 3) ? "set" : "not acknowledged");
     }
+    g_held[bus][addr] = 1;
     return u;
 
 fail:
@@ -215,16 +284,33 @@ fail:
 
 usbpad *usbpad_open(void)
 {
-    int bus, addr;
+    long now = now_ms();
+    int bus, addr, not_pad;
 
-    for (bus = 0; bus < 4; bus++)
-        for (addr = 2; addr < 16; addr++) {
+    for (bus = 0; bus < N_BUS; bus++)
+        for (addr = 2; addr < N_ADDR; addr++) {
             char path[24];
+            struct stat sb;
             usbpad *u;
             if (bus == 0 && addr == 2) continue;        /* the internal Bluetooth chip: never touched */
+            if (g_held[bus][addr]) continue;
             snprintf(path, sizeof path, "/dev/ugen%d.%d", bus, addr);
-            if (access(path, F_OK) != 0) continue;
-            if ((u = try_node(bus, addr))) return u;
+            if (stat(path, &sb) != 0) {
+                g_not_pad[bus][addr].set = 0;
+                continue;
+            }
+            if (g_not_pad[bus][addr].set && g_not_pad[bus][addr].ino == sb.st_ino &&
+                g_not_pad[bus][addr].ctime == (long)sb.st_ctime && now - g_not_pad[bus][addr].seen < T_NOT_PAD)
+                continue;                               /* looked at a moment ago, unchanged */
+            not_pad = 0;
+            if ((u = try_node(bus, addr, &not_pad))) {
+                g_not_pad[bus][addr].set = 0;
+                return u;
+            }
+            g_not_pad[bus][addr].set = (unsigned char)not_pad;
+            g_not_pad[bus][addr].ino = sb.st_ino;
+            g_not_pad[bus][addr].ctime = (long)sb.st_ctime;
+            g_not_pad[bus][addr].seen = now;
         }
     return NULL;
 }
@@ -292,6 +378,7 @@ void usbpad_close(usbpad *u)
     struct usb_fs_uninit un;
 
     if (!u) return;
+    if (u->bus >= 0 && u->bus < N_BUS && u->addr >= 0 && u->addr < N_ADDR) g_held[u->bus][u->addr] = 0;
     if (u->fd >= 0) {
         memset(&un, 0, sizeof un);
         ioctl(u->fd, USB_FS_UNINIT, &un);

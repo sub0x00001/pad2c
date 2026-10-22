@@ -19,6 +19,8 @@ typedef struct {
     uint8_t iface;
     uint8_t ep_in, ep_out;          /* ep_out 0: none */
     uint16_t mps_in, mps_out;
+    uint32_t hide;                  /* bit n: interface n is a boot keyboard or mouse beside the pad
+                                       (the USB Wireless Adapter 2's macros), hidden from the console */
 } usbdesc_pick;
 
 /* Picks the interface to read:
@@ -31,5 +33,9 @@ int usbdesc_choose(const unsigned char *cfg, int len, uint16_t vid, usbdesc_pick
 /* A string descriptor (UTF-16LE) as ASCII, '?' for anything else, trailing
  * spaces dropped, cut to fit `size`. 0 if it is not one or is blank. */
 int usbdesc_string(const unsigned char *d, int len, char *out, size_t size);
+
+/* The product's name, where its own is not: the 8BitDo USB Wireless Adapter 2
+ * calls itself "8BitDo Receiver" or "Controller". NULL if none is known. */
+const char *usbdesc_known_name(uint16_t vid, uint16_t pid, const char *manufacturer);
 
 #endif
