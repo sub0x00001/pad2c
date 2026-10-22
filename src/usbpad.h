@@ -17,7 +17,9 @@
 
 typedef struct usbpad usbpad;
 
-/* Looks for a supported pad. NULL if there is none right now. */
+/* Looks for a supported pad not open already. NULL if there is none right
+ * now. Cheap enough to call every 100 ms: a node found not to be a pad is
+ * not opened again for a while unless it changes. */
 usbpad *usbpad_open(void);
 
 /* Takes what came in. Returns 1 with *st updated when a controller report

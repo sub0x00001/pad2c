@@ -69,6 +69,7 @@ int32_t sceUserServiceInitialize(void *params);
 int32_t sceUserServiceGetInitialUser(int32_t *user);
 int32_t sceUserServiceGetForegroundUser(int32_t *user);
 int32_t sceUserServiceGetLoginUserIdList(int32_t list[4]);
+int32_t sceUserServiceGetUserName(int32_t user, char *name, size_t size);
 int32_t scePadInit(void);
 int32_t scePadSetProcessPrivilege(int32_t privilege);
 int32_t scePadGetHandle(int32_t user, int32_t type, int32_t index);
@@ -121,29 +122,43 @@ static int32_t g_user = -1;
  * (the "who is using this controller" screen) as the kernel log tells it.
  * Kept in /data/pad2c/owner, so the pad goes back to that user next time, as
  * a DualSense does. -1: none yet. */
-#define OWNER_PATH "/data/pad2c/owner"
-static int32_t g_owner = -1;
+#define OWNER_PATH "/data/pad2c/owner"     /* slot 0; slot n: owner.n */
+static int32_t g_owner[HOST_MAX_PADS] = { -1, -1, -1, -1 };
+
+static void owner_path(int slot, char *out, size_t size)
+{
+    if (slot == 0) snprintf(out, size, "%s", OWNER_PATH);
+    else snprintf(out, size, "%s.%d", OWNER_PATH, slot);
+}
 
 static void owner_load(void)
 {
-    FILE *f = fopen(OWNER_PATH, "r");
+    char path[64];
     unsigned v;
+    int i;
 
-    if (!f) return;
-    if (fscanf(f, "%x", &v) == 1 && v != 0 && v != 0xFFFFFFFFu) g_owner = (int32_t)v;
-    fclose(f);
+    for (i = 0; i < HOST_MAX_PADS; i++) {
+        FILE *f;
+        owner_path(i, path, sizeof path);
+        if (!(f = fopen(path, "r"))) continue;
+        if (fscanf(f, "%x", &v) == 1 && v != 0 && v != 0xFFFFFFFFu) g_owner[i] = (int32_t)v;
+        fclose(f);
+    }
 }
 
 static void owner_save(int slot, int32_t user)
 {
+    char path[64], tmp[72];
     FILE *f;
 
-    if (user == g_owner) return;
-    g_owner = user;
-    if ((f = fopen(OWNER_PATH ".tmp", "w"))) {
+    if (slot < 0 || slot >= HOST_MAX_PADS || user == g_owner[slot]) return;
+    g_owner[slot] = user;
+    owner_path(slot, path, sizeof path);
+    snprintf(tmp, sizeof tmp, "%s.tmp", path);
+    if ((f = fopen(tmp, "w"))) {
         fprintf(f, "%x\n", (unsigned)user);
         fclose(f);
-        rename(OWNER_PATH ".tmp", OWNER_PATH);
+        rename(tmp, path);
     }
     log_line("slot %d: now used by user %#x, remembered", slot, (unsigned)user);
 }
@@ -523,16 +538,36 @@ int vpad_init(void)
     g_user = main_user();
     log_line("vpad: main user %#x", (unsigned)g_user);
     owner_load();
-    if (g_owner != -1) log_line("vpad: the pad was last used by user %#x", (unsigned)g_owner);
+    {
+        int i;
+        for (i = 0; i < HOST_MAX_PADS; i++)
+            if (g_owner[i] != -1) log_line("vpad: slot %d was last used by user %#x", i, (unsigned)g_owner[i]);
+    }
     g_log_fd = log_source_open();
     if (g_log_fd >= 0) log_source_drain();
     g_ready = 1;
     return 1;
 }
 
+int vpad_user_name(int32_t user, char *out, size_t size)
+{
+    out[0] = 0;
+    if (user == -1 || sceUserServiceGetUserName(user, out, size) != 0) {
+        out[0] = 0;
+        return 0;
+    }
+    return out[0] != 0;
+}
+
 void vpad_shutdown(void)
 {
     log_source_close();
+}
+
+int32_t vpad_user(int slot)
+{
+    if (slot < 0 || slot >= HOST_MAX_PADS || g_slot[slot].st != VP_READY) return -1;
+    return g_owner[slot];
 }
 
 int vpad_off(int slot)
@@ -624,7 +659,7 @@ static void finish_identification(long now)
     {
         int32_t to = -1;
         if (bind_wanted()) to = g_user = main_user();
-        else if (g_owner != -1 && signed_in(g_owner)) to = g_owner;
+        else if (g_owner[slot] != -1 && signed_in(g_owner[slot])) to = g_owner[slot];
         v->st = VP_READY;
         if (to == -1) {
             log_line("slot %d: device %#llx left unassigned: press Home on the pad to choose its user", slot,

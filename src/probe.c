@@ -8,7 +8,8 @@
  * Also copies what /dev/klog holds, to see why another payload died.
  *
  * Everything goes to stdout (the loader's socket) and /data/pad2c/probe.log.
- * Nothing is written to any device except standard GET_DESCRIPTOR requests.
+ * Nothing is written to any device except standard GET_DESCRIPTOR requests
+ * (configuration, HID report and string descriptors).
  */
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -18,6 +19,8 @@
 #include <dev/usb/usb_ioctl.h>
 
 #include <ps5/kernel.h>
+
+#include "usbdesc.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -32,7 +35,7 @@
 #define LOG_PATH DIR_PATH "/probe.log"
 #define KLOG_PATH DIR_PATH "/klog.txt"
 #ifndef READ_SECONDS
-#define READ_SECONDS 60
+#define READ_SECONDS 90
 #endif
 #define MAX_EPS 8
 
@@ -67,7 +70,7 @@ static void notify(const char *msg)
     notify_request req;
 
     memset(&req, 0, sizeof req);
-    snprintf(req.message, sizeof req.message, "%s", msg);
+    snprintf(req.message, sizeof req.message, "pad2c probe by Sub\n%s", msg);
     sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
 }
 
@@ -235,7 +238,11 @@ static void read_reports(int fd, const ep_in *eps, int n)
     }
 
     out(">>> PRESS BUTTONS, TRIGGERS AND MOVE BOTH STICKS NOW (%d s) <<<", READ_SECONDS);
-    notify("pad2c probe: press every button, one at a time (60 s)");
+    {
+        char msg[96];
+        snprintf(msg, sizeof msg, "Press every button, one at a time (%d s)", READ_SECONDS);
+        notify(msg);
+    }
     end = now_ms() + READ_SECONDS * 1000;
     while (now_ms() < end) {
         struct usb_fs_complete done;
@@ -289,6 +296,31 @@ static void read_reports(int fd, const ep_in *eps, int n)
     }
 }
 
+/* A string descriptor (US English), with a standard GET_DESCRIPTOR. The
+ * serial number is not read. */
+static void print_string(int fd, const char *what, int index)
+{
+    struct usb_ctl_request req;
+    uint8_t buf[255];
+    char s[128];
+
+    if (index == 0) return;
+    memset(&req, 0, sizeof req);
+    memset(buf, 0, sizeof buf);
+    req.ucr_data = buf;
+    req.ucr_flags = 0x0004;                     /* USB_SHORT_XFER_OK */
+    req.ucr_request.bmRequestType = UT_READ_DEVICE;
+    req.ucr_request.bRequest = UR_GET_DESCRIPTOR;
+    USETW(req.ucr_request.wValue, 0x0300 | index);
+    USETW(req.ucr_request.wIndex, 0x0409);
+    USETW(req.ucr_request.wLength, sizeof buf);
+    if (ioctl(fd, USB_DO_REQUEST, &req) != 0) {
+        out("  %s string %d: errno %d", what, index, errno);
+        return;
+    }
+    if (usbdesc_string(buf, req.ucr_actlen, s, sizeof s)) out("  %s \"%s\"", what, s);
+}
+
 static void probe_device(int bus, int addr)
 {
     char path[32];
@@ -316,13 +348,16 @@ static void probe_device(int bus, int addr)
         close(fd);
         return;
     }
-    out("%s: %04x:%04x class %02x/%02x/%02x USB %04x", path, UGETW(dd.idVendor), UGETW(dd.idProduct),
-        dd.bDeviceClass, dd.bDeviceSubClass, dd.bDeviceProtocol, UGETW(dd.bcdUSB));
+    out("%s: %04x:%04x class %02x/%02x/%02x USB %04x, device release %x.%02x", path, UGETW(dd.idVendor),
+        UGETW(dd.idProduct), dd.bDeviceClass, dd.bDeviceSubClass, dd.bDeviceProtocol, UGETW(dd.bcdUSB),
+        UGETW(dd.bcdDevice) >> 8, UGETW(dd.bcdDevice) & 0xFF);
     if (dd.bDeviceClass == 0x09) {
         out("  a hub, skipped");
         close(fd);
         return;
     }
+    print_string(fd, "manufacturer", dd.iManufacturer);
+    print_string(fd, "product", dd.iProduct);
     memset(&di, 0, sizeof di);
     if (ioctl(fd, USB_GET_DEVICEINFO, &di) == 0)
         out("  \"%.60s\" by \"%.60s\", speed %u, config %u", di.udi_product, di.udi_vendor, di.udi_speed,
@@ -363,14 +398,14 @@ int main(void)
     mkdir(DIR_PATH, 0777);
     g_log = fopen(LOG_PATH, "w");
     fw = kernel_get_fw_version();
-    out("pad2c probe 1, firmware %x.%02x (raw %#x), pid %d", (unsigned)(fw >> 24) & 0xFF,
+    out("pad2c probe 2, firmware %x.%02x (raw %#x), pid %d", (unsigned)(fw >> 24) & 0xFF,
         (unsigned)(fw >> 16) & 0xFF, (unsigned)fw, (int)getpid());
-    notify("pad2c probe: starting");
+    notify("Starting");
     copy_klog();
     for (bus = 0; bus < 4; bus++)
         for (addr = 1; addr < 10; addr++) probe_device(bus, addr);
     out("done");
-    notify("pad2c probe: done");
+    notify("Done");
     if (g_log) fclose(g_log);
     return 0;
 }

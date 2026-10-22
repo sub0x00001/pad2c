@@ -48,6 +48,9 @@ int main(void)
     expect("L4",     R(0x04, 0x00, 0x0f, 127, 127, 127, 127, 0, 0), PAD_TOUCHPAD);
     expect("R4",     R(0x20, 0x00, 0x0f, 127, 127, 127, 127, 0, 0), PAD_TOUCHPAD);
     expect("LT half",R(0x00, 0x00, 0x0f, 127, 127, 127, 127, 0, 43), PAD_L2);
+    /* The 8BitDo USB Wireless Adapter 2 in DInput mode: a DualSense's touchpad click */
+    expect("touchpad", R(0x00, 0x00, 0x1f, 127, 127, 127, 127, 0, 0), PAD_TOUCHPAD);
+    expect("touchpad+up", R(0x00, 0x00, 0x10, 127, 127, 127, 127, 0, 0), PAD_TOUCHPAD | PAD_UP);
 
     usbpad_parse_8bitdo(R(0, 0, 0x0f, 126, 31, 224, 136, 7, 9), 10, &st);
     if (st.lx != 126 || st.ly != 31 || st.rx != 224 || st.ry != 136 || st.r2 != 7 || st.l2 != 9) {

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.0
+- The **8BitDo USB Wireless Adapter 2** (#1): any controller it pairs with (tested: DualSense, Ultimate 2C, GameSir G8
+  Plus Galileo) becomes a virtual DualSense. Plugged in, the adapter tries several identities and keeps the one whose
+  host answers like Windows: pad2c now looks for new pads every 100 ms and sends XInput pads what Windows sends (the
+  Microsoft OS string and the XUSB request) before the LED, so the adapter settles in XInput by itself instead of its
+  DualShock 4 mode, which stops sending after a moment. DInput (View + Left) works too.
+- **Several controllers at once**, up to four, each its own virtual DualSense and its own remembered user
+  (`/data/pad2c/owner`, `owner.1`, ...).
+- The keyboard and mouse the adapter (and the 2C receiver in XInput mode) add beside the pad are detached from the
+  console's driver: the console lists only the controller among its accessories.
+- **Settings page** on port 8090 (address in the start notification): the controllers live, and a **Nintendo
+  layout** switch per controller (A/B and X/Y swapped, kept in `/data/pad2c/config`) for pads such as the G8 in
+  Switch mode.
+- DInput: a DualSense's touchpad click through the adapter.
+- Wired XInput controllers (tested: GameSir G8 on its cable) work as well.
+- The adapter is named "8BitDo USB Wireless Adapter 2" in the notifications.
+- `pad2c-probe`: the product and manufacturer names, the device release, 90 s of reports.
+
 ## 1.0.0
 - The Ultimate 2C receiver in XInput mode works (issue #2). When the controller connects, that receiver enumerates
   as `2dc8:310a` with an XInput interface (`ff/5d/01`), a keyboard and a vendor HID; 0.2.1 read the keyboard. pad2c

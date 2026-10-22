@@ -5,7 +5,8 @@
 
 /* 8BitDo Ultimate 2C dongle, report 1 (from its HID report descriptor and a
  * calibration on the console):
- *   [0] 01  [1..2] buttons 1-15  [3] hat (low nibble, 0 up clockwise, 15 none)
+ *   [0] 01  [1..2] buttons 1-15  [3] hat (low nibble, 0 up clockwise, 15 none),
+ *   bit 4: touchpad click (the USB Wireless Adapter 2 in DInput mode, with a DualSense)
  *   [4] LX [5] LY [6] RX [7] RY (127 centre, up is smaller)  [8] RT [9] LT
  * Buttons: 1 A, 2 B, 3 L4, 4 X, 5 Y, 6 R4, 7 LB, 8 RB, 9 LT, 10 RT,
  *          11 View, 12 Menu, 13 Home, 14 L3, 15 R3.
@@ -32,6 +33,7 @@ int usbpad_parse_8bitdo(const unsigned char *r, int n, pad_state *st)
     for (i = 0; i < sizeof map / sizeof map[0]; i++)
         if (b & map[i].bit) st->buttons |= map[i].pad;
     if ((r[3] & 0x0F) < 8) st->buttons |= hat[r[3] & 0x0F];
+    if (r[3] & 0x10) st->buttons |= PAD_TOUCHPAD;   /* USB Wireless Adapter 2: a DualSense's touchpad */
     st->lx = r[4];
     st->ly = r[5];
     st->rx = r[6];

@@ -53,6 +53,26 @@ static void test_choose(void)
 
     CHECK(usbdesc_choose(desc_kbd, sizeof desc_kbd, VID_8BITDO, &p) == USBPAD_NONE, "boot keyboard taken");
     CHECK(usbdesc_choose(desc_310a, 20, VID_8BITDO, &p) == USBPAD_NONE, "truncated descriptor taken");
+
+    /* the boot keyboard beside the pad is to be hidden from the console */
+    usbdesc_choose(desc_310a, sizeof desc_310a, VID_8BITDO, &p);
+    CHECK(p.hide == (1u << 1), "310a: hide %#x, want interface 1", (unsigned)p.hide);
+    usbdesc_choose(desc_hid, sizeof desc_hid, VID_8BITDO, &p);
+    CHECK(p.hide == 0, "301c: hide %#x", (unsigned)p.hide);
+}
+
+static void test_names(void)
+{
+    const char *n;
+
+    n = usbdesc_known_name(0x2DC8, 0x3105, "8BitDo");
+    CHECK(n && !strcmp(n, "8BitDo USB Wireless Adapter 2"), "3105: %s", n ? n : "(none)");
+    n = usbdesc_known_name(0x2DC8, 0x3106, "8BitDo");
+    CHECK(n && !strcmp(n, "8BitDo USB Wireless Adapter 2"), "3106: %s", n ? n : "(none)");
+    n = usbdesc_known_name(0x045E, 0x028E, "8BitDo");
+    CHECK(n && !strcmp(n, "8BitDo USB Wireless Adapter 2"), "028e from 8BitDo: %s", n ? n : "(none)");
+    CHECK(!usbdesc_known_name(0x045E, 0x028E, "Microsoft"), "a real Xbox 360 pad renamed");
+    CHECK(!usbdesc_known_name(0x2DC8, 0x301C, "8BitDo"), "the 2C dongle renamed");
 }
 
 /* Xbox 360 report: 00 14, buttons, LT, RT, LX, LY, RX, RY (int16, y up) */
@@ -150,6 +170,7 @@ int main(void)
 {
     test_string();
     test_choose();
+    test_names();
     test_xinput();
     printf("%s (%d failure(s))\n", fails ? "FAILED" : "all passed", fails);
     return fails != 0;

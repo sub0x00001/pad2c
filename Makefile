@@ -13,6 +13,10 @@ test:
 	./build/test_map
 	cc -std=c11 -Wall -Wextra -Werror -Isrc -o build/test_usb src/usbdesc.c src/mapxinput.c tests/test_usb.c
 	./build/test_usb
+	cc -std=c11 -Wall -Wextra -Werror -Isrc -o build/test_config src/config.c tests/test_config.c
+	./build/test_config
+	cc -std=c11 -Wall -Wextra -Werror -D_DEFAULT_SOURCE -Isrc -o build/test_web src/web.c src/log.c src/util.c tests/test_web.c
+	./build/test_web
 
 ifdef PS5_PAYLOAD_SDK
 include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
@@ -21,15 +25,15 @@ endif
 CFLAGS := -std=gnu11 -Wall -Wextra -O2 -Isrc
 LDLIBS := -lScePad -lSceUserService -ldl
 
-SRCS := src/main.c src/usbpad.c src/usbdesc.c src/map8bitdo.c src/mapxinput.c src/ps5_vpad.c src/ps5_power.c src/lock.c src/log.c src/util.c
+SRCS := src/main.c src/usbpad.c src/usbdesc.c src/map8bitdo.c src/mapxinput.c src/config.c src/web.c src/ps5_vpad.c src/ps5_power.c src/lock.c src/log.c src/util.c
 
 dist/pad2c-$(VERSION).elf: $(SRCS) $(wildcard src/*.h)
 	@mkdir -p dist
 	$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)
 
-dist/pad2c-probe.elf: src/probe.c
+dist/pad2c-probe.elf: src/probe.c src/usbdesc.c src/usbdesc.h
 	@mkdir -p dist
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ src/probe.c src/usbdesc.c
 
 clean:
 	rm -rf dist build
