@@ -41,16 +41,16 @@ void vpad_update(int slot, const pad_state *st);
 int  vpad_press_ps(int slot, int ms);
 void vpad_remove(int slot);
 
-/* pad2c: 1 when the slot's virtual pad is gone on the console's side (turned
+/* padbridge: 1 when the slot's virtual pad is gone on the console's side (turned
  * off from the console's menu, refused input, or never identified). The
  * caller removes it and asks for a new one when the user presses PS (Home). */
 int  vpad_off(int slot);
 
-/* pad2c: the user the slot's live pad is given to, -1 if none (or not known). */
+/* padbridge: the user the slot's live pad is given to, -1 if none (or not known). */
 int32_t vpad_user(int slot);
 int     vpad_user_name(int32_t user, char *out, size_t size);   /* 0 if unknown */
 
-/* pad2c: closes the kernel log, held open while running. */
+/* padbridge: closes the kernel log, held open while running. */
 void vpad_shutdown(void);
 
 /* The user's own DualSense, read only. Returns 0 if it cannot be read;

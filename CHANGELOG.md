@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.0
+- **pad2c is now padbridge**: it is no longer about one controller. The payloads are `padbridge-<version>.elf` and
+  `padbridge-probe.elf`, notifications read "padbridge by Sub", and its files live in `/data/padbridge`. On its first
+  start it asks a running pad2c to stop and moves `/data/pad2c` there, remembered users and settings included.
+- The log names, once per device, every USB device plugged in that padbridge does not read: a controller in another
+  mode shows up there (the GameSir G8 on its cable in Switch mode is `057e:2009` "Pro Controller").
+- Tested: the Ultimate 2C on a USB cable (XInput, `2dc8:310a`), in the USB-A and USB-C ports.
+- README rewritten around what is supported and tested: the Ultimate 2C dongle, the USB Wireless Adapter 2 and the
+  controllers tested through it, controllers on a USB cable, and the settings page (with a screenshot).
+
 ## 1.1.0
 - The **8BitDo USB Wireless Adapter 2** (#1): any controller it pairs with (tested: DualSense, Ultimate 2C, GameSir G8
   Plus Galileo) becomes a virtual DualSense. Plugged in, the adapter tries several identities and keeps the one whose

@@ -1,4 +1,4 @@
-/* pad2c probe -- read-only look at the console's USB devices.
+/* padbridge probe -- read-only look at the console's USB devices.
  *
  * For every /dev/ugenB.A that is not a hub and not the internal Bluetooth
  * chip (ugen0.2, left alone on purpose): device descriptor, name, full
@@ -7,7 +7,7 @@
  * its interrupt IN endpoints send (press buttons and move the sticks then).
  * Also copies what /dev/klog holds, to see why another payload died.
  *
- * Everything goes to stdout (the loader's socket) and /data/pad2c/probe.log.
+ * Everything goes to stdout (the loader's socket) and /data/padbridge/probe.log.
  * Nothing is written to any device except standard GET_DESCRIPTOR requests
  * (configuration, HID report and string descriptors).
  */
@@ -31,7 +31,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define DIR_PATH "/data/pad2c"
+#define DIR_PATH "/data/padbridge"
 #define LOG_PATH DIR_PATH "/probe.log"
 #define KLOG_PATH DIR_PATH "/klog.txt"
 #ifndef READ_SECONDS
@@ -70,7 +70,7 @@ static void notify(const char *msg)
     notify_request req;
 
     memset(&req, 0, sizeof req);
-    snprintf(req.message, sizeof req.message, "pad2c probe by Sub\n%s", msg);
+    snprintf(req.message, sizeof req.message, "padbridge probe by Sub\n%s", msg);
     sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
 }
 
@@ -398,7 +398,7 @@ int main(void)
     mkdir(DIR_PATH, 0777);
     g_log = fopen(LOG_PATH, "w");
     fw = kernel_get_fw_version();
-    out("pad2c probe 2, firmware %x.%02x (raw %#x), pid %d", (unsigned)(fw >> 24) & 0xFF,
+    out("padbridge probe 2, firmware %x.%02x (raw %#x), pid %d", (unsigned)(fw >> 24) & 0xFF,
         (unsigned)(fw >> 16) & 0xFF, (unsigned)fw, (int)getpid());
     notify("Starting");
     copy_klog();

@@ -1,7 +1,7 @@
 /* Interface choice and the XInput mapping. Runs on the PC.
  *
- * The 310a descriptor is the one in issue #2 (pad2c-probe on firmware 13.00):
- * the Ultimate 2C receiver in XInput mode. pad2c 0.2.1 read its keyboard. */
+ * The 310a descriptor is the one in issue #2 (padbridge-probe on firmware 13.00):
+ * the Ultimate 2C receiver in XInput mode. padbridge 0.2.1 read its keyboard. */
 #include "usbdesc.h"
 #include "usbpad.h"
 

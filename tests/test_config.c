@@ -31,7 +31,7 @@ int main(void)
 
     /* lines it does not know are kept, a damaged file is no harm */
     f = fopen(path, "w");
-    fputs("# pad2c settings\nfuture-option 7\nswap Some Pad\n\nswap\n", f);
+    fputs("# padbridge settings\nfuture-option 7\nswap Some Pad\n\nswap\n", f);
     fclose(f);
     config_load(path);
     CHECK(config_swap("Some Pad"), "swap from a hand-written file");

@@ -1,13 +1,13 @@
 /* The settings page served by web.c: one file, no outside resources (the
  * console may have no internet). It asks /api/status about 10 times a second
  * while it is visible. */
-#ifndef PAD2C_WEBPAGE_H
-#define PAD2C_WEBPAGE_H
+#ifndef PADBRIDGE_WEBPAGE_H
+#define PADBRIDGE_WEBPAGE_H
 
 static const char WEB_PAGE[] =
 "<!doctype html><html lang=en><head><meta charset=utf-8>"
 "<meta name=viewport content='width=device-width,initial-scale=1'>"
-"<title>pad2c by Sub</title><style>"
+"<title>padbridge by Sub</title><style>"
 ":root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--txt:#e8eaf0;--dim:#8a91a0;--on:#3b82f6;--ok:#22c55e}"
 "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);"
 "font:15px/1.4 -apple-system,Segoe UI,Roboto,sans-serif}"
@@ -31,9 +31,9 @@ static const char WEB_PAGE[] =
 ".bar i{display:block;height:100%;background:var(--on);width:0}"
 ".empty{color:var(--dim);padding:20px}footer{color:var(--dim);font-size:12px;padding:0 20px 20px}"
 "</style></head><body>"
-"<header><h1>pad2c by Sub</h1><small id=st>connecting...</small></header>"
+"<header><h1>padbridge by Sub</h1><small id=st>connecting...</small></header>"
 "<main id=m><div class=empty>No controller yet.</div></main>"
-"<footer>Settings are kept on the console in /data/pad2c/config.</footer>"
+"<footer>Settings are kept on the console in /data/padbridge/config.</footer>"
 "<script>"
 "var B=[['Cross',0x4000],['Circle',0x2000],['Square',0x8000],['Triangle',0x1000],['L1',0x400],['R1',0x800],"
 "['L2',0x100],['R2',0x200],['L3',2],['R3',4],['Create',1],['Options',8],['PS',0x10000],['Touchpad',0x100000],"
@@ -63,7 +63,7 @@ static const char WEB_PAGE[] =
 "if(key!==shown){shown=key;document.getElementById('m').innerHTML=j.pads.length?j.pads.map(card).join('')"
 ":'<div class=empty>No controller yet. Plug in a dongle or adapter and switch the controller on.</div>'}"
 "j.pads.forEach(live);setTimeout(tick,100)}).catch(function(){"
-"document.getElementById('st').textContent='pad2c is not answering';setTimeout(tick,1000)})}"
+"document.getElementById('st').textContent='padbridge is not answering';setTimeout(tick,1000)})}"
 "function sw(e){var s=e.getAttribute('data-s');busy[s]=1;"
 "fetch('/api/swap?slot='+s+'&on='+(e.checked?1:0),{method:'POST'}).then(function(){"
 "setTimeout(function(){busy[s]=0},300)})}"
