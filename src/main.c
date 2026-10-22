@@ -18,10 +18,12 @@
 #include "lock.h"
 #include "log.h"
 #include "ps5_power.h"
+#include "config.h"
 #include "ps5_vpad.h"
 #include "usbpad.h"
 #include "util.h"
 #include "version.h"
+#include "web.h"
 
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -35,6 +37,7 @@
 #define LOG_PATH   STATE_DIR "/pad2c.log"
 #define LOCK_PATH  STATE_DIR "/pad2c.lock"
 #define STOP_FLAG  STATE_DIR "/stop"
+#define CONFIG_PATH STATE_DIR "/config"
 #define T_SCAN     100          /* ms between looks for new pads (the USB Wireless Adapter 2 shows
                                    its XInput identity for under a second) */
 #define T_RESEND   50           /* ms: the last state is sent again at least this often */
@@ -59,14 +62,55 @@ typedef struct {
     int turned_off;             /* the console turned it off: Home brings it back */
     int ps_latch;               /* PS (Home) held since before: not a new press */
     char model[80];             /* "<name> (<mode>)", for the notifications */
+    int swap;                   /* A/B and X/Y exchanged (config.h) */
+    char user[40];              /* the console user's name, for the settings page */
+    long user_at;               /* ms: when it was last looked up */
 } ctl;
 
 static ctl g_ctl[HOST_MAX_PADS];
+
+/* From the settings page. */
+static void set_swap(int slot, int on)
+{
+    ctl *c = &g_ctl[slot];
+    const char *name;
+
+    if (!c->pad) return;
+    name = usbpad_name(c->pad);
+    c->swap = on;
+    log_line("slot %d: A/B and X/Y %s for \"%s\"%s", slot, on ? "swapped" : "as they are", name,
+             config_set_swap(name, on) ? "" : " (not saved)");
+}
+
+/* What the settings page shows. */
+static void web_fill(web_pad *w, long now)
+{
+    int i;
+
+    for (i = 0; i < HOST_MAX_PADS; i++) {
+        ctl *c = &g_ctl[i];
+        memset(&w[i], 0, sizeof w[i]);
+        if (!c->pad) continue;
+        if (now - c->user_at >= 2000) {
+            c->user_at = now;
+            if (!c->vpad_made || !vpad_user_name(vpad_user(i), c->user, sizeof c->user)) c->user[0] = 0;
+        }
+        w[i].present = 1;
+        w[i].connected = c->vpad_made;
+        snprintf(w[i].name, sizeof w[i].name, "%s", usbpad_name(c->pad));
+        snprintf(w[i].mode, sizeof w[i].mode, "%s", usbpad_mode(c->pad));
+        snprintf(w[i].user, sizeof w[i].user, "%s", c->user);
+        w[i].swap = c->swap;
+        w[i].st = c->st;
+    }
+}
 
 static void ctl_poll(int slot, long now)
 {
     ctl *c = &g_ctl[slot];
     int r = usbpad_poll(c->pad, &c->st);
+
+    if (r > 0 && c->swap) config_apply_swap(&c->st);
 
     if (r < 0) {
         usbpad_close(c->pad);
@@ -135,7 +179,14 @@ int main(void)
         log_close();
         return 1;
     }
-    notify("Version %s running\nSwitch the controller on with its dongle plugged in", PAD2C_VERSION);
+    config_load(CONFIG_PATH);
+    {
+        char ip[32];
+        if (web_start(WEB_PORT) && web_local_ip(ip, sizeof ip))
+            notify("Version %s running\nSettings: http://%s:%d", PAD2C_VERSION, ip, WEB_PORT);
+        else
+            notify("Version %s running\nSwitch the controller on with its dongle plugged in", PAD2C_VERSION);
+    }
     for (i = 0; i < HOST_MAX_PADS; i++) pad_state_reset(&g_ctl[i].st);
 
     while (!g_stop) {
@@ -148,7 +199,9 @@ int main(void)
                 if (g_ctl[i].pad || g_ctl[i].vpad_made) continue;
                 if ((g_ctl[i].pad = usbpad_open())) {
                     g_ctl[i].turned_off = 0;
-                    log_line("slot %d: %s", i, usbpad_name(g_ctl[i].pad));
+                    g_ctl[i].swap = config_swap(usbpad_name(g_ctl[i].pad));
+                    g_ctl[i].user_at = -10000;
+                    log_line("slot %d: %s%s", i, usbpad_name(g_ctl[i].pad), g_ctl[i].swap ? ", A/B and X/Y swapped" : "");
                 }
                 break;
             }
@@ -156,6 +209,11 @@ int main(void)
         for (i = 0; i < HOST_MAX_PADS; i++)
             if (g_ctl[i].pad) ctl_poll(i, now);
         vpad_poll(now);
+        {
+            web_pad w[HOST_MAX_PADS];
+            web_fill(w, now);
+            web_poll(w, HOST_MAX_PADS, set_swap);
+        }
 
         /* Turned off from the console's menu (or the console dropped it): the
          * virtual pad goes away, as a DualSense disconnects. */
@@ -193,6 +251,7 @@ int main(void)
         if (g_ctl[i].vpad_made) vpad_remove(i);
         usbpad_close(g_ctl[i].pad);
     }
+    web_stop();
     vpad_shutdown();
     vpad_creds_restore();
     lock_release();

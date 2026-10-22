@@ -69,6 +69,7 @@ int32_t sceUserServiceInitialize(void *params);
 int32_t sceUserServiceGetInitialUser(int32_t *user);
 int32_t sceUserServiceGetForegroundUser(int32_t *user);
 int32_t sceUserServiceGetLoginUserIdList(int32_t list[4]);
+int32_t sceUserServiceGetUserName(int32_t user, char *name, size_t size);
 int32_t scePadInit(void);
 int32_t scePadSetProcessPrivilege(int32_t privilege);
 int32_t scePadGetHandle(int32_t user, int32_t type, int32_t index);
@@ -548,9 +549,25 @@ int vpad_init(void)
     return 1;
 }
 
+int vpad_user_name(int32_t user, char *out, size_t size)
+{
+    out[0] = 0;
+    if (user == -1 || sceUserServiceGetUserName(user, out, size) != 0) {
+        out[0] = 0;
+        return 0;
+    }
+    return out[0] != 0;
+}
+
 void vpad_shutdown(void)
 {
     log_source_close();
+}
+
+int32_t vpad_user(int slot)
+{
+    if (slot < 0 || slot >= HOST_MAX_PADS || g_slot[slot].st != VP_READY) return -1;
+    return g_owner[slot];
 }
 
 int vpad_off(int slot)
