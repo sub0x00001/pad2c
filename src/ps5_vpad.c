@@ -78,6 +78,7 @@ int32_t scePadClose(int32_t handle);
 int32_t scePadReadState(int32_t handle, ScePadData *data);
 int32_t scePadVirtualDeviceAddDevice(void *param, int32_t deviceType);
 int32_t scePadVirtualDeviceInsertData(int32_t handle, const void *data);
+int32_t scePadVirtualDeviceGetRemoteSetting(int32_t handle, void *setting);
 int32_t scePadVirtualDeviceDeleteDevice(int32_t handle);
 
 /* From the payload SDK (ps5/kernel.h). */
@@ -562,6 +563,18 @@ int vpad_user_name(int32_t user, char *out, size_t size)
 void vpad_shutdown(void)
 {
     log_source_close();
+}
+
+/* padbridge: what the console asks of the slot's virtual pad (rumble, light
+ * bar), as scePadVirtualDeviceGetRemoteSetting returns it; the layout is being
+ * worked out (on a PS4 it is close to a DualShock 4 output report: [3] large
+ * motor, [4] small motor, [5..7] light bar). The buffer is cleared first. The
+ * call's return, or -1 if the slot has no live pad. */
+int32_t vpad_remote_setting(int slot, uint8_t *buf, size_t size)
+{
+    memset(buf, 0, size);
+    if (slot < 0 || slot >= HOST_MAX_PADS || g_slot[slot].st != VP_READY || g_slot[slot].sys_off) return -1;
+    return scePadVirtualDeviceGetRemoteSetting(g_slot[slot].handle, buf);
 }
 
 int32_t vpad_user(int slot)

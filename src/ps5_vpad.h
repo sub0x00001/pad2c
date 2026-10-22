@@ -46,6 +46,10 @@ void vpad_remove(int slot);
  * caller removes it and asks for a new one when the user presses PS (Home). */
 int  vpad_off(int slot);
 
+/* padbridge: what the console asks of the slot's virtual pad (rumble, light
+ * bar), as the system keeps it: the call's return, -1 if no live pad. */
+int32_t vpad_remote_setting(int slot, uint8_t *buf, size_t size);
+
 /* padbridge: the user the slot's live pad is given to, -1 if none (or not known). */
 int32_t vpad_user(int slot);
 int     vpad_user_name(int32_t user, char *out, size_t size);   /* 0 if unknown */

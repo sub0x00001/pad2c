@@ -68,11 +68,52 @@ typedef struct {
     int ps_latch;               /* PS (Home) held since before: not a new press */
     char model[80];             /* "<name> (<mode>)", for the notifications */
     int swap;                   /* A/B and X/Y exchanged (config.h) */
+    unsigned char remote[64];   /* the last GetRemoteSetting bytes logged (rumble research) */
+    int32_t remote_ret;
+    long remote_at;
     char user[40];              /* the console user's name, for the settings page */
     long user_at;               /* ms: when it was last looked up */
 } ctl;
 
 static ctl g_ctl[HOST_MAX_PADS];
+
+/* Rumble research: what the console asks of each live virtual pad, read
+ * every 16 ms (games pulse rumble for tens of milliseconds) and logged when
+ * it changes, at most 20 lines a second. */
+#define T_REMOTE 16
+static long g_remote_window;
+static int g_remote_lines;
+
+static void remote_poll(int slot, long now)
+{
+    ctl *c = &g_ctl[slot];
+    unsigned char buf[256];
+    int32_t r;
+
+    if (!c->vpad_made || now - c->remote_at < T_REMOTE) return;
+    c->remote_at = now;
+    r = vpad_remote_setting(slot, buf, sizeof buf);
+    if (r == -1) return;
+    if (now - g_remote_window >= 1000) {
+        g_remote_window = now;
+        g_remote_lines = 0;
+    }
+    if (r == c->remote_ret && !memcmp(buf, c->remote, sizeof c->remote)) return;
+    if (g_remote_lines >= 20) return;           /* logged next time it differs */
+    g_remote_lines++;
+    if (r != c->remote_ret) log_line("slot %d: remote setting returns %#x", slot, (unsigned)r);
+    {
+        char hex[3 * 32 + 1];
+        int i, k;
+        for (k = 0; k < 64; k += 32) {
+            if (!memcmp(buf + k, c->remote + k, 32) && r == c->remote_ret) continue;
+            for (i = 0; i < 32; i++) snprintf(hex + 3 * i, 4, "%02x ", buf[k + i]);
+            log_line("slot %d: remote[%02d] %s", slot, k, hex);
+        }
+    }
+    c->remote_ret = r;
+    memcpy(c->remote, buf, sizeof c->remote);
+}
 
 /* From the settings page. */
 static void set_swap(int slot, int on)
@@ -233,13 +274,17 @@ int main(void)
                     g_ctl[i].turned_off = 0;
                     g_ctl[i].swap = config_swap(usbpad_name(g_ctl[i].pad));
                     g_ctl[i].user_at = -10000;
+                    g_ctl[i].remote_ret = 0x7fffffff;      /* the first read is logged */
                     log_line("slot %d: %s%s", i, usbpad_name(g_ctl[i].pad), g_ctl[i].swap ? ", A/B and X/Y swapped" : "");
                 }
                 break;
             }
         }
         for (i = 0; i < HOST_MAX_PADS; i++)
-            if (g_ctl[i].pad) ctl_poll(i, now);
+            if (g_ctl[i].pad) {
+                ctl_poll(i, now);
+                remote_poll(i, now);
+            }
         vpad_poll(now);
         {
             web_pad w[HOST_MAX_PADS];
