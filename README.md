@@ -53,8 +53,7 @@ not supported directly; it works through the USB Wireless Adapter 2.
 
 | Controller | Result |
 |---|---|
-| GameSir G8 Plus Galileo, in its Xbox mode | ✅ shows up as an Xbox 360 controller (`3537:1014`), buttons in the right places |
-| GameSir G8 Plus Galileo, in its Switch or DS4 wired mode | ❌ not read (the G8 switches its wired mode; see its manual) |
+| 8BitDo Ultimate 2C Wireless | ✅ see above |
 | Other wired XInput (Xbox 360 protocol) controllers | expected to work, untested: please report |
 
 Cables, dongles and the adapter work in the console's **USB-A** and **USB-C** ports alike.
