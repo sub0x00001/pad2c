@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.2
+## 1.0.0
 - The Ultimate 2C receiver in XInput mode works (issue #2). When the controller connects, that receiver enumerates
   as `2dc8:310a` with an XInput interface (`ff/5d/01`), a keyboard and a vendor HID; 0.2.1 read the keyboard. pad2c
   now picks the interface from the descriptor: XInput first, from any vendor, then on an 8BitDo the first HID that is
