@@ -22,6 +22,7 @@
 #include "lock.h"
 #include "log.h"
 #include "ps5_power.h"
+#include "combo.h"
 #include "config.h"
 #include "ps5_vpad.h"
 #include "usbpad.h"
@@ -68,11 +69,41 @@ typedef struct {
     int ps_latch;               /* PS (Home) held since before: not a new press */
     char model[80];             /* "<name> (<mode>)", for the notifications */
     int swap;                   /* A/B and X/Y exchanged (config.h) */
+    int xinput;                 /* View + Menu as the touchpad (combo.h) */
+    combo combo;
+    pad_state sent;             /* what the virtual pad was last given */
+    long remote_at;             /* ms: rumble last read */
+    int rumbling;
     char user[40];              /* the console user's name, for the settings page */
     long user_at;               /* ms: when it was last looked up */
 } ctl;
 
 static ctl g_ctl[HOST_MAX_PADS];
+
+/* Rumble: what the console asks of each live virtual pad, read every 16 ms
+ * (games pulse rumble for tens of milliseconds). It is kept as a DualShock 4
+ * output report: [3] large motor, [4] small motor. PS4 games fill them; PS5
+ * games turn rumble into DualSense haptics inside the system and leave them
+ * at 0. Logged when a pad's rumble starts and stops. */
+#define T_REMOTE 16
+
+static void remote_poll(int slot, long now)
+{
+    ctl *c = &g_ctl[slot];
+    unsigned char buf[256];
+    int on;
+
+    if (!c->vpad_made || now - c->remote_at < T_REMOTE) return;
+    c->remote_at = now;
+    if (vpad_remote_setting(slot, buf, sizeof buf) != 0) return;
+    usbpad_rumble(c->pad, buf[3], buf[4]);
+    on = buf[3] || buf[4];
+    if (on != c->rumbling) {
+        c->rumbling = on;
+        log_line("slot %d: rumble %s%s", slot, on ? "on" : "off",
+                 on && !usbpad_can_rumble(c->pad) ? " (this pad cannot rumble)" : "");
+    }
+}
 
 /* From the settings page. */
 static void set_swap(int slot, int on)
@@ -106,8 +137,20 @@ static void web_fill(web_pad *w, long now)
         snprintf(w[i].mode, sizeof w[i].mode, "%s", usbpad_mode(c->pad));
         snprintf(w[i].user, sizeof w[i].user, "%s", c->user);
         w[i].swap = c->swap;
-        w[i].st = c->st;
+        w[i].st = c->vpad_made ? c->sent : c->st;
     }
+}
+
+/* The pad's state to its virtual DualSense, View + Menu as the touchpad on
+ * XInput pads. */
+static void ctl_send(int slot, long now)
+{
+    ctl *c = &g_ctl[slot];
+
+    c->sent = c->st;
+    if (c->xinput) c->sent.buttons = combo_filter(&c->combo, c->st.buttons, now);
+    vpad_update(slot, &c->sent);
+    c->last_sent = now;
 }
 
 static void ctl_poll(int slot, long now)
@@ -147,11 +190,10 @@ static void ctl_poll(int slot, long now)
             notify("%s connected", c->model);
         }
         if (c->ps_latch) c->st.buttons &= ~(uint32_t)PAD_PS;
-        if (c->vpad_made) vpad_update(slot, &c->st);
+        if (c->vpad_made) ctl_send(slot, now);
         c->last_sent = now;
-    } else if (c->vpad_made && now - c->last_sent >= T_RESEND) {
-        vpad_update(slot, &c->st);      /* keep the pad fed while nothing changes */
-        c->last_sent = now;
+    } else if (c->vpad_made && (now - c->last_sent >= T_RESEND || (c->xinput && c->combo.held))) {
+        ctl_send(slot, now);            /* keep the pad fed; let a held-back View or Menu out */
     }
 }
 
@@ -232,14 +274,20 @@ int main(void)
                 if ((g_ctl[i].pad = usbpad_open())) {
                     g_ctl[i].turned_off = 0;
                     g_ctl[i].swap = config_swap(usbpad_name(g_ctl[i].pad));
+                    g_ctl[i].xinput = !strcmp(usbpad_mode(g_ctl[i].pad), "XInput");
+                    combo_reset(&g_ctl[i].combo);
                     g_ctl[i].user_at = -10000;
+                    g_ctl[i].rumbling = 0;
                     log_line("slot %d: %s%s", i, usbpad_name(g_ctl[i].pad), g_ctl[i].swap ? ", A/B and X/Y swapped" : "");
                 }
                 break;
             }
         }
         for (i = 0; i < HOST_MAX_PADS; i++)
-            if (g_ctl[i].pad) ctl_poll(i, now);
+            if (g_ctl[i].pad) {
+                ctl_poll(i, now);
+                remote_poll(i, now);
+            }
         vpad_poll(now);
         {
             web_pad w[HOST_MAX_PADS];
@@ -253,6 +301,7 @@ int main(void)
             ctl *c = &g_ctl[i];
             if (!c->vpad_made || !vpad_off(i)) continue;
             vpad_remove(i);
+            usbpad_rumble(c->pad, 0, 0);
             c->vpad_made = 0;
             c->turned_off = 1;
             c->ps_latch = (c->st.buttons & PAD_PS) != 0;
@@ -281,6 +330,15 @@ int main(void)
     log_line("stopping: %s", why);
     for (i = 0; i < HOST_MAX_PADS; i++) {
         if (g_ctl[i].vpad_made) vpad_remove(i);
+        if (g_ctl[i].pad && usbpad_can_rumble(g_ctl[i].pad)) {
+            pad_state st;
+            int k;
+            usbpad_rumble(g_ctl[i].pad, 0, 0);          /* no pad left rumbling */
+            for (k = 0; k < 10; k++) {
+                usbpad_poll(g_ctl[i].pad, &st);
+                usleep(2000);
+            }
+        }
         usbpad_close(g_ctl[i].pad);
     }
     web_stop();

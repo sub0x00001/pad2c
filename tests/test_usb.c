@@ -41,23 +41,23 @@ static void test_choose(void)
 {
     usbdesc_pick p;
 
-    CHECK(usbdesc_choose(desc_310a, sizeof desc_310a, VID_8BITDO, &p) == USBPAD_XINPUT, "310a: not XInput");
+    CHECK(usbdesc_choose(desc_310a, sizeof desc_310a, VID_8BITDO, 0, &p) == USBPAD_XINPUT, "310a: not XInput");
     CHECK(p.iface == 0 && p.ep_in == 0x84 && p.mps_in == 32, "310a: in %#x/%u iface %u", p.ep_in, p.mps_in, p.iface);
     CHECK(p.ep_out == 0x05 && p.mps_out == 32, "310a: out %#x/%u", p.ep_out, p.mps_out);
 
-    CHECK(usbdesc_choose(desc_310a, sizeof desc_310a, 0x045E, &p) == USBPAD_XINPUT, "XInput of another vendor");
+    CHECK(usbdesc_choose(desc_310a, sizeof desc_310a, 0x045E, 0, &p) == USBPAD_XINPUT, "XInput of another vendor");
 
-    CHECK(usbdesc_choose(desc_hid, sizeof desc_hid, VID_8BITDO, &p) == USBPAD_8BITDO, "8BitDo HID: not chosen");
+    CHECK(usbdesc_choose(desc_hid, sizeof desc_hid, VID_8BITDO, 0, &p) == USBPAD_8BITDO, "8BitDo HID: not chosen");
     CHECK(p.ep_in == 0x84 && p.mps_in == 64, "8BitDo HID: in %#x/%u", p.ep_in, p.mps_in);
-    CHECK(usbdesc_choose(desc_hid, sizeof desc_hid, 0x1234, &p) == USBPAD_NONE, "HID of another vendor taken");
+    CHECK(usbdesc_choose(desc_hid, sizeof desc_hid, 0x1234, 0, &p) == USBPAD_NONE, "HID of another vendor taken");
 
-    CHECK(usbdesc_choose(desc_kbd, sizeof desc_kbd, VID_8BITDO, &p) == USBPAD_NONE, "boot keyboard taken");
-    CHECK(usbdesc_choose(desc_310a, 20, VID_8BITDO, &p) == USBPAD_NONE, "truncated descriptor taken");
+    CHECK(usbdesc_choose(desc_kbd, sizeof desc_kbd, VID_8BITDO, 0, &p) == USBPAD_NONE, "boot keyboard taken");
+    CHECK(usbdesc_choose(desc_310a, 20, VID_8BITDO, 0, &p) == USBPAD_NONE, "truncated descriptor taken");
 
     /* the boot keyboard beside the pad is to be hidden from the console */
-    usbdesc_choose(desc_310a, sizeof desc_310a, VID_8BITDO, &p);
+    usbdesc_choose(desc_310a, sizeof desc_310a, VID_8BITDO, 0, &p);
     CHECK(p.hide == (1u << 1), "310a: hide %#x, want interface 1", (unsigned)p.hide);
-    usbdesc_choose(desc_hid, sizeof desc_hid, VID_8BITDO, &p);
+    usbdesc_choose(desc_hid, sizeof desc_hid, VID_8BITDO, 0, &p);
     CHECK(p.hide == 0, "301c: hide %#x", (unsigned)p.hide);
 }
 

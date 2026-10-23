@@ -42,7 +42,7 @@ static int pick(const iface *ifs, int n, const iface *f, int kind, usbdesc_pick 
     return kind;
 }
 
-int usbdesc_choose(const unsigned char *cfg, int len, uint16_t vid, usbdesc_pick *out)
+int usbdesc_choose(const unsigned char *cfg, int len, uint16_t vid, uint16_t pid, usbdesc_pick *out)
 {
     iface ifs[16];
     int n = 0, off = 0, i;
@@ -76,6 +76,9 @@ int usbdesc_choose(const unsigned char *cfg, int len, uint16_t vid, usbdesc_pick
 
     for (i = 0; i < n; i++)
         if (is_xinput(&ifs[i]) && ifs[i].ep_in) return pick(ifs, n, &ifs[i], USBPAD_XINPUT, out);
+    if (vid == 0x057E && pid == 0x2009)
+        for (i = 0; i < n; i++)
+            if (ifs[i].cls == 0x03 && ifs[i].ep_in) return pick(ifs, n, &ifs[i], USBPAD_SWITCH, out);
     if (vid == VID_8BITDO)
         for (i = 0; i < n; i++)
             if (is_pad_hid(&ifs[i]) && ifs[i].ep_in) return pick(ifs, n, &ifs[i], USBPAD_8BITDO, out);

@@ -17,6 +17,10 @@ test:
 	./build/test_config
 	cc -std=c11 -Wall -Wextra -Werror -D_DEFAULT_SOURCE -Isrc -o build/test_web src/web.c src/log.c src/util.c tests/test_web.c
 	./build/test_web
+	cc -std=c11 -Wall -Wextra -Werror -Isrc -o build/test_combo src/combo.c tests/test_combo.c
+	./build/test_combo
+	cc -std=c11 -Wall -Wextra -Werror -Isrc -o build/test_switch src/mapswitch.c src/usbdesc.c tests/test_switch.c
+	./build/test_switch
 
 ifdef PS5_PAYLOAD_SDK
 include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
@@ -25,7 +29,7 @@ endif
 CFLAGS := -std=gnu11 -Wall -Wextra -O2 -Isrc
 LDLIBS := -lScePad -lSceUserService -ldl
 
-SRCS := src/main.c src/usbpad.c src/usbdesc.c src/map8bitdo.c src/mapxinput.c src/config.c src/web.c src/ps5_vpad.c src/ps5_power.c src/lock.c src/log.c src/util.c
+SRCS := src/main.c src/usbpad.c src/usbdesc.c src/map8bitdo.c src/mapxinput.c src/mapswitch.c src/config.c src/combo.c src/web.c src/ps5_vpad.c src/ps5_power.c src/lock.c src/log.c src/util.c
 
 dist/padbridge-$(VERSION).elf: $(SRCS) $(wildcard src/*.h)
 	@mkdir -p dist

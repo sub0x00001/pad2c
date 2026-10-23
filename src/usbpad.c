@@ -1,5 +1,6 @@
 #include "usbpad.h"
 #include "log.h"
+#include "mapswitch.h"
 #include "usbdesc.h"
 #include "util.h"
 
@@ -50,6 +51,11 @@ struct usbpad {
     unsigned char busy[N_RD + 1];
     long t_alive;
     int logged_first;
+    unsigned char rumble[2], rumble_sent[2];    /* large, small motor: wanted, last sent */
+    int rumble_pending;
+    long rumble_at;                 /* ms: last rumble packet sent */
+    switch_sticks swcal;            /* Switch Pro: stick centres and reach */
+    unsigned char swcount;          /* Switch Pro: output packet number, 0..15 */
 };
 
 static int dead_errno(int e)
@@ -58,7 +64,7 @@ static int dead_errno(int e)
 }
 
 /* The interface to read, from the full configuration descriptor. */
-static int choose_interface(int fd, uint16_t vid, usbdesc_pick *p)
+static int choose_interface(int fd, uint16_t vid, uint16_t pid, usbdesc_pick *p)
 {
     struct usb_gen_descriptor gd;
     unsigned char cfg[1024];
@@ -70,7 +76,7 @@ static int choose_interface(int fd, uint16_t vid, usbdesc_pick *p)
     gd.ugd_config_index = 0xFF;
     if (ioctl(fd, USB_GET_FULL_DESC, &gd) != 0) return USBPAD_NONE;
     len = gd.ugd_actlen < (int)sizeof cfg ? gd.ugd_actlen : (int)sizeof cfg;
-    return usbdesc_choose(cfg, len, vid, p);
+    return usbdesc_choose(cfg, len, vid, pid, p);
 }
 
 /* Sends one interrupt OUT transfer and waits for it, a short while. */
@@ -168,11 +174,109 @@ static int start_read(usbpad *u, int i)
     return 1;
 }
 
+/* ---- the Switch Pro Controller's setup over USB --------------------------
+ *
+ * Until the host has done this, the pad (or the USB Wireless Adapter 2 in its
+ * Switch mode) sends nothing but a status and enumerates again every few
+ * seconds. As SDL does it (BTrySetupUSB and after): the handshake 80 02, high
+ * speed 80 03, 80 02 again, then 80 04 "stay on USB"; then subcommands on
+ * report 01: the full input report 0x30, vibration on, player 1's light.
+ * Done once at connection, a few hundred milliseconds at most. */
+
+/* One read on transfer 0, waiting at most `ms`. Its length, 0 if none. */
+static int read_once(usbpad *u, unsigned char *out, int ms)
+{
+    struct usb_fs_complete done;
+    long t0 = now_ms();
+
+    if (!u->busy[0] && start_read(u, 0) <= 0) return 0;
+    while (now_ms() - t0 < ms) {
+        memset(&done, 0, sizeof done);
+        if (ioctl(u->fd, USB_FS_COMPLETE, &done) != 0) {
+            usleep(1000);
+            continue;
+        }
+        if (done.ep_index > N_RD) continue;
+        u->busy[done.ep_index] = 0;
+        if (done.ep_index != 0) continue;
+        if (u->ep[0].status || !u->ep[0].aFrames) return 0;
+        memcpy(out, u->buf[0], RD_MAX);
+        return (int)u->lenp[0][0];
+    }
+    return 0;
+}
+
+/* Waits for a reply whose first byte is `id` and byte `at` is `sub` (sub < 0:
+ * any). 1 if it came within `ms`. Other reports on the way are dropped. */
+static int wait_reply(usbpad *u, int id, int at, int sub, int ms)
+{
+    unsigned char r[RD_MAX];
+    long t0 = now_ms();
+
+    while (now_ms() - t0 < ms) {
+        int n = read_once(u, r, ms - (int)(now_ms() - t0));
+        if (n > at && r[0] == id && (sub < 0 || r[at] == sub)) return 1;
+    }
+    return 0;
+}
+
+static int switch_proprietary(usbpad *u, int cmd, int wait)
+{
+    unsigned char p[64];
+    int tries;
+
+    for (tries = 0; tries < 3; tries++) {
+        memset(p, 0, sizeof p);
+        p[0] = 0x80;
+        p[1] = (unsigned char)cmd;
+        if (!send_out(u, p, sizeof p)) continue;
+        if (!wait || wait_reply(u, 0x81, 1, cmd, 100)) return 1;
+    }
+    return 0;
+}
+
+static int switch_subcommand(usbpad *u, int sub, const unsigned char *args, int n)
+{
+    unsigned char p[64];
+    int tries;
+
+    for (tries = 0; tries < 3; tries++) {
+        memset(p, 0, sizeof p);
+        p[0] = 0x01;
+        p[1] = u->swcount;
+        u->swcount = (unsigned char)((u->swcount + 1) & 0x0F);
+        switch_rumble_encode(0, 0, p + 2);          /* no rumble */
+        p[10] = (unsigned char)sub;
+        if (n > 0) memcpy(p + 11, args, (size_t)n);
+        if (!send_out(u, p, sizeof p)) continue;
+        if (wait_reply(u, 0x21, 14, sub, 100)) return 1;
+    }
+    return 0;
+}
+
+static void switch_setup(usbpad *u)
+{
+    static const unsigned char full = 0x30, on = 0x01, player1 = 0x01;
+    int hs, fu, mode, vib, led;
+
+    switch_sticks_reset(&u->swcal);
+    hs = switch_proprietary(u, 0x02, 1);
+    switch_proprietary(u, 0x03, 1);                 /* some pads do not answer: no matter */
+    switch_proprietary(u, 0x02, 1);
+    fu = switch_proprietary(u, 0x04, 0);
+    mode = switch_subcommand(u, 0x03, &full, 1);
+    vib = switch_subcommand(u, 0x48, &on, 1);
+    led = switch_subcommand(u, 0x30, &player1, 1);
+    log_line("usb: %s: Switch Pro setup: handshake %s, USB %s, full reports %s, vibration %s, light %s", u->path,
+             hs ? "ok" : "no answer", fu ? "ok" : "failed", mode ? "ok" : "no answer", vib ? "ok" : "no answer",
+             led ? "ok" : "no answer");
+}
+
 /* *not_pad: set when the device answered and is not a pad (as opposed to a
  * failure on the way, which is tried again). */
 static usbpad *try_node(int bus, int addr, int *not_pad)
 {
-    static const char *kinds[] = { "", "8BitDo HID (DInput)", "XInput" };
+    static const char *kinds[] = { "", "8BitDo HID (DInput)", "XInput", "Switch Pro" };
     struct usb_device_descriptor dd;
     struct usb_device_info di;
     struct usb_fs_init init;
@@ -190,7 +294,7 @@ static usbpad *try_node(int bus, int addr, int *not_pad)
     u->fd = open(u->path, O_RDWR);
     if (u->fd < 0) goto fail;
     if (ioctl(u->fd, USB_GET_DEVICE_DESC, &dd) != 0) goto fail;
-    u->kind = choose_interface(u->fd, UGETW(dd.idVendor), &pick);
+    u->kind = choose_interface(u->fd, UGETW(dd.idVendor), UGETW(dd.idProduct), &pick);
     if (u->kind == USBPAD_NONE) {
         char prod[48] = "";
         read_string(u->fd, dd.iProduct, prod, sizeof prod);
@@ -201,7 +305,7 @@ static usbpad *try_node(int bus, int addr, int *not_pad)
     u->ep_in = pick.ep_in;
     u->mps = pick.mps_in;
     if (u->mps == 0 || u->mps > RD_MAX) u->mps = RD_MAX;
-    if (u->kind == USBPAD_XINPUT && pick.ep_out) {
+    if ((u->kind == USBPAD_XINPUT || u->kind == USBPAD_SWITCH) && pick.ep_out) {
         u->ep_out = pick.ep_out;
         u->mps_out = pick.mps_out ? pick.mps_out : 32;
         if (u->mps_out > RD_MAX) u->mps_out = RD_MAX;
@@ -262,7 +366,7 @@ static usbpad *try_node(int bus, int addr, int *not_pad)
     }
     u->t_alive = now_ms();
     log_line("usb: %s %04x:%04x \"%s\", %s interface %u, reading endpoint %#x (%u bytes)", u->path,
-             UGETW(dd.idVendor), UGETW(dd.idProduct), u->name, kinds[u->kind], pick.iface, u->ep_in, u->mps);
+             UGETW(dd.idVendor), UGETW(dd.idProduct), u->name, (size_t)u->kind < sizeof kinds / sizeof kinds[0] ? kinds[u->kind] : "?", pick.iface, u->ep_in, u->mps);
     /* A keyboard or mouse beside the pad (the USB Wireless Adapter 2's macros
      * in XInput mode): the console's own driver lets go of it, so the console
      * does not list a keyboard and a mouse among its accessories. */
@@ -272,6 +376,7 @@ static usbpad *try_node(int bus, int addr, int *not_pad)
             log_line("usb: %s: interface %d (keyboard/mouse) hidden from the console: %s", u->path, i,
                      ioctl(u->fd, USB_IFACE_DRIVER_DETACH, &n) == 0 ? "ok" : "failed");
         }
+    if (u->kind == USBPAD_SWITCH) switch_setup(u);
     if (u->kind == USBPAD_XINPUT) {
         xinput_windows_hello(u);
         /* The LED of player 1, as a PC sets it: some XInput pads report only after it. */
@@ -316,7 +421,7 @@ usbpad *usbpad_open(void)
             /* Logged once per device: what is plugged in and not read, to
              * tell why a controller does nothing (another mode, say). */
             if (not_pad && strcmp(g_logged[bus][addr], g_reject) != 0) {
-                log_line("usb: %s %s: not a controller padbridge reads", path, g_reject);
+                log_line("usb: %s %s: not read by padbridge", path, g_reject);
                 snprintf(g_logged[bus][addr], sizeof g_logged[bus][addr], "%s", g_reject);
             }
             g_not_pad[bus][addr].set = (unsigned char)not_pad;
@@ -334,7 +439,77 @@ const char *usbpad_name(const usbpad *u)
 
 const char *usbpad_mode(const usbpad *u)
 {
-    return u && u->kind == USBPAD_XINPUT ? "XInput" : "DInput";
+    if (!u) return "DInput";
+    return u->kind == USBPAD_XINPUT ? "XInput" : u->kind == USBPAD_SWITCH ? "Switch" : "DInput";
+}
+
+/* Starts an OUT transfer without waiting: its completion comes through
+ * usbpad_poll. 0 if it could not start. */
+static int start_out(usbpad *u, const unsigned char *data, int n)
+{
+    struct usb_fs_start st;
+
+    if (!u->ep_out || u->busy[EP_OUT] || n > u->mps_out || n > RD_MAX) return 0;
+    memcpy(u->buf[EP_OUT], data, (size_t)n);
+    u->lenp[EP_OUT][0] = (uint32_t)n;
+    u->ep[EP_OUT].nFrames = 1;
+    u->ep[EP_OUT].aFrames = 0;
+    u->ep[EP_OUT].status = 0;
+    memset(&st, 0, sizeof st);
+    st.ep_index = EP_OUT;
+    if (ioctl(u->fd, USB_FS_START, &st) != 0) return 0;
+    u->busy[EP_OUT] = 1;
+    return 1;
+}
+
+int usbpad_can_rumble(const usbpad *u)
+{
+    return u && (u->kind == USBPAD_XINPUT || u->kind == USBPAD_SWITCH) && u->ep_out;
+}
+
+void usbpad_rumble(usbpad *u, uint8_t large, uint8_t small)
+{
+    if (!usbpad_can_rumble(u)) return;
+    u->rumble[0] = large;
+    u->rumble[1] = small;
+    u->rumble_pending = large != u->rumble_sent[0] || small != u->rumble_sent[1];
+}
+
+/* Rumble, sent when the OUT endpoint is free; a newer value waiting replaces
+ * an older one.
+ *   XInput:     00 08 00 <large> <small> 00 00 00
+ *   Switch Pro: report 0x10, packet number, 8 rumble bytes (mapswitch.c),
+ *               sent again every 50 ms while on, as SDL does: the pad stops
+ *               rumbling when it is not refreshed. */
+#define T_SWITCH_RUMBLE 50
+
+static void rumble_flush(usbpad *u, long now)
+{
+    unsigned char r[64];
+    int n;
+
+    if (u->kind == USBPAD_SWITCH && (u->rumble_sent[0] || u->rumble_sent[1]) && now - u->rumble_at >= T_SWITCH_RUMBLE)
+        u->rumble_pending = 1;
+    if (!u->rumble_pending || u->busy[EP_OUT]) return;
+    memset(r, 0, sizeof r);
+    if (u->kind == USBPAD_SWITCH) {
+        r[0] = 0x10;
+        r[1] = u->swcount;
+        switch_rumble_encode(u->rumble[0], u->rumble[1], r + 2);
+        n = 64;
+    } else {
+        r[1] = 0x08;
+        r[3] = u->rumble[0];
+        r[4] = u->rumble[1];
+        n = 8;
+    }
+    if (start_out(u, r, n)) {
+        if (u->kind == USBPAD_SWITCH) u->swcount = (unsigned char)((u->swcount + 1) & 0x0F);
+        u->rumble_at = now;
+        u->rumble_sent[0] = u->rumble[0];
+        u->rumble_sent[1] = u->rumble[1];
+        u->rumble_pending = 0;
+    }
 }
 
 int usbpad_poll(usbpad *u, pad_state *st)
@@ -364,7 +539,8 @@ int usbpad_poll(usbpad *u, pad_state *st)
         if (u->ep[i].status) continue;              /* cancelled or stalled: read again */
         if (!u->ep[i].aFrames) continue;
         if (u->kind == USBPAD_XINPUT ? usbpad_parse_xinput(u->buf[i], (int)u->lenp[i][0], st)
-                                     : usbpad_parse_8bitdo(u->buf[i], (int)u->lenp[i][0], st)) {
+            : u->kind == USBPAD_SWITCH ? switch_parse(u->buf[i], (int)u->lenp[i][0], &u->swcal, st)
+                                       : usbpad_parse_8bitdo(u->buf[i], (int)u->lenp[i][0], st)) {
             if (!u->logged_first) {
                 u->logged_first = 1;
                 log_line("usb: first controller report");
@@ -372,6 +548,7 @@ int usbpad_poll(usbpad *u, pad_state *st)
             got = 1;
         }
     }
+    rumble_flush(u, now);
     /* A re-enumeration does not always fail the pending reads at once.
      * (USB_GET_DEVICEINFO fails on the 8BitDo dongle, so it is not used.) */
     if (now - u->t_alive >= T_ALIVE) {
