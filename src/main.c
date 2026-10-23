@@ -22,6 +22,7 @@
 #include "lock.h"
 #include "log.h"
 #include "ps5_power.h"
+#include "combo.h"
 #include "config.h"
 #include "ps5_vpad.h"
 #include "usbpad.h"
@@ -68,6 +69,9 @@ typedef struct {
     int ps_latch;               /* PS (Home) held since before: not a new press */
     char model[80];             /* "<name> (<mode>)", for the notifications */
     int swap;                   /* A/B and X/Y exchanged (config.h) */
+    int xinput;                 /* View + Menu as the touchpad (combo.h) */
+    combo combo;
+    pad_state sent;             /* what the virtual pad was last given */
     unsigned char remote[256];  /* the last GetRemoteSetting bytes logged (rumble research) */
     int32_t remote_ret;
     long remote_at;
@@ -149,8 +153,20 @@ static void web_fill(web_pad *w, long now)
         snprintf(w[i].mode, sizeof w[i].mode, "%s", usbpad_mode(c->pad));
         snprintf(w[i].user, sizeof w[i].user, "%s", c->user);
         w[i].swap = c->swap;
-        w[i].st = c->st;
+        w[i].st = c->vpad_made ? c->sent : c->st;
     }
+}
+
+/* The pad's state to its virtual DualSense, View + Menu as the touchpad on
+ * XInput pads. */
+static void ctl_send(int slot, long now)
+{
+    ctl *c = &g_ctl[slot];
+
+    c->sent = c->st;
+    if (c->xinput) c->sent.buttons = combo_filter(&c->combo, c->st.buttons, now);
+    vpad_update(slot, &c->sent);
+    c->last_sent = now;
 }
 
 static void ctl_poll(int slot, long now)
@@ -190,11 +206,10 @@ static void ctl_poll(int slot, long now)
             notify("%s connected", c->model);
         }
         if (c->ps_latch) c->st.buttons &= ~(uint32_t)PAD_PS;
-        if (c->vpad_made) vpad_update(slot, &c->st);
+        if (c->vpad_made) ctl_send(slot, now);
         c->last_sent = now;
-    } else if (c->vpad_made && now - c->last_sent >= T_RESEND) {
-        vpad_update(slot, &c->st);      /* keep the pad fed while nothing changes */
-        c->last_sent = now;
+    } else if (c->vpad_made && (now - c->last_sent >= T_RESEND || (c->xinput && c->combo.held))) {
+        ctl_send(slot, now);            /* keep the pad fed; let a held-back View or Menu out */
     }
 }
 
@@ -275,6 +290,8 @@ int main(void)
                 if ((g_ctl[i].pad = usbpad_open())) {
                     g_ctl[i].turned_off = 0;
                     g_ctl[i].swap = config_swap(usbpad_name(g_ctl[i].pad));
+                    g_ctl[i].xinput = !strcmp(usbpad_mode(g_ctl[i].pad), "XInput");
+                    combo_reset(&g_ctl[i].combo);
                     g_ctl[i].user_at = -10000;
                     g_ctl[i].remote_ret = 0x7fffffff;      /* the first read is logged */
                     log_line("slot %d: %s%s", i, usbpad_name(g_ctl[i].pad), g_ctl[i].swap ? ", A/B and X/Y swapped" : "");
