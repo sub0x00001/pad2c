@@ -167,7 +167,7 @@ All in `/data/padbridge/` on the console:
 | File | |
 |---|---|
 | `padbridge.log` | the log |
-| `stop` | create it to stop padbridge (it also stops by itself before rest mode) |
+| `stop` | create it to stop padbridge (in rest mode it lets the controllers go and waits; it picks them up again when the console wakes) |
 | `owner`, `owner.1`... | the user the controller in each slot was last given to (delete to forget) |
 | `config` | the settings page's choices (`swap <controller name>` for Nintendo layout) |
 | `bind_user` | optional: `main`, `other` or a hexadecimal user id, to give controllers to that user at once |
