@@ -33,7 +33,7 @@ controller with it, switch the controller on: nothing to set on the adapter.
 
 | Controller | How it pairs with the adapter | Result |
 |---|---|---|
-| DualSense | its normal pairing (Create + PS) | ✅ all buttons, touchpad click (DInput mode) |
+| DualSense | its normal pairing (Create + PS) | ✅ all buttons; vibration in XInput mode; touchpad click in DInput mode (View + Menu in XInput) |
 | 8BitDo Ultimate 2C Wireless | Switch mode (Home + Y) | ✅ all buttons |
 | GameSir G8 Plus Galileo | Switch mode (its only mode the adapter accepts) | ✅ with **Nintendo layout** on (it sends A/B and X/Y by label); **vibration** with the adapter in its Switch mode |
 | Anything else the adapter accepts (DualShock 4, Xbox One / Series, Switch Pro, Joy-Con, Wii U Pro, 8BitDo) | | expected to work, untested: please report |
@@ -62,7 +62,7 @@ sends it on:
 |---|---|
 | Ultimate 2C on its dongle | in XInput mode (tested) |
 | Through the USB Wireless Adapter 2, Switch-type controllers (GameSir G8 tested, Switch Pro, Joy-Con) | with the adapter in its **Switch mode** (tested) |
-| Through the USB Wireless Adapter 2, PlayStation controllers | in XInput mode, as 8BitDo documents (untested) |
+| Through the USB Wireless Adapter 2, PlayStation controllers (DualSense tested) | in XInput mode |
 
 **PS5 games do not rumble**: they send DualSense haptics, and the console turns even their classic rumble requests
 into haptic audio before the virtual DualSense sees them. Controllers in DInput mode do not rumble either.
@@ -104,7 +104,7 @@ mode, so the console's Accessories list shows only the controller.
 
 | Mode | How | Notes |
 |---|---|---|
-| XInput (`2dc8:3106`) | automatic | vibration in PS4 games (expected for PlayStation controllers, untested); View + Menu as the touchpad |
+| XInput (`2dc8:3106`) | automatic | vibration in PS4 games for PlayStation controllers (DualSense tested); View + Menu as the touchpad |
 | DInput (`2dc8:3105`) | hold **View + Left** (Create + Left on a DualSense) for 3 s; the light blinks twice | passes a DualSense's touchpad click |
 | Switch (`057e:2009`, a Switch Pro Controller) | hold **- + L** (View + LB) for 3 s; the light blinks twice | **vibration for Switch-type controllers** (the adapter passes it on only in this mode); Capture as the touchpad; buttons by position, so a pad that sends them by label (GameSir G8) needs Nintendo layout |
 | back to automatic | hold the adapter's button until its light goes off, then pair the controller again | |

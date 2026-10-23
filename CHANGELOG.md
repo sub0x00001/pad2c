@@ -3,7 +3,8 @@
 ## 1.3.0
 - **Vibration in PS4 games**, on controllers in XInput mode and Switch Pro controllers: padbridge reads what the game asks of the virtual
   DualSense (`scePadVirtualDeviceGetRemoteSetting`, large and small motors as on a DualShock 4) every 16 ms and sends
-  it as XInput rumble. Tested with Crash Bandicoot N. Sane Trilogy and the Ultimate 2C in XInput mode. Rumble stops
+  it as XInput rumble. Tested with Crash Bandicoot N. Sane Trilogy: the Ultimate 2C in XInput mode, and a DualSense
+  through the USB Wireless Adapter 2 in XInput mode. Rumble stops
   when the console turns a controller off and when padbridge stops. The log says when a controller's rumble starts
   and stops.
 - **Switch Pro Controller over USB** (`057e:2009`): the USB Wireless Adapter 2 in its **Switch mode** (- + L), with
