@@ -50,6 +50,8 @@ struct usbpad {
     unsigned char busy[N_RD + 1];
     long t_alive;
     int logged_first;
+    unsigned char rumble[2], rumble_sent[2];    /* large, small motor: wanted, last sent */
+    int rumble_pending;
 };
 
 static int dead_errno(int e)
@@ -337,6 +339,54 @@ const char *usbpad_mode(const usbpad *u)
     return u && u->kind == USBPAD_XINPUT ? "XInput" : "DInput";
 }
 
+/* Starts an OUT transfer without waiting: its completion comes through
+ * usbpad_poll. 0 if it could not start. */
+static int start_out(usbpad *u, const unsigned char *data, int n)
+{
+    struct usb_fs_start st;
+
+    if (!u->ep_out || u->busy[EP_OUT] || n > u->mps_out || n > RD_MAX) return 0;
+    memcpy(u->buf[EP_OUT], data, (size_t)n);
+    u->lenp[EP_OUT][0] = (uint32_t)n;
+    u->ep[EP_OUT].nFrames = 1;
+    u->ep[EP_OUT].aFrames = 0;
+    u->ep[EP_OUT].status = 0;
+    memset(&st, 0, sizeof st);
+    st.ep_index = EP_OUT;
+    if (ioctl(u->fd, USB_FS_START, &st) != 0) return 0;
+    u->busy[EP_OUT] = 1;
+    return 1;
+}
+
+int usbpad_can_rumble(const usbpad *u)
+{
+    return u && u->kind == USBPAD_XINPUT && u->ep_out;
+}
+
+void usbpad_rumble(usbpad *u, uint8_t large, uint8_t small)
+{
+    if (!usbpad_can_rumble(u)) return;
+    u->rumble[0] = large;
+    u->rumble[1] = small;
+    u->rumble_pending = large != u->rumble_sent[0] || small != u->rumble_sent[1];
+}
+
+/* XInput rumble: 00 08 00 <large> <small> 00 00 00, sent when the OUT
+ * endpoint is free; a newer value waiting replaces an older one. */
+static void rumble_flush(usbpad *u)
+{
+    unsigned char r[8] = { 0x00, 0x08, 0x00, 0, 0, 0, 0, 0 };
+
+    if (!u->rumble_pending || u->busy[EP_OUT]) return;
+    r[3] = u->rumble[0];
+    r[4] = u->rumble[1];
+    if (start_out(u, r, sizeof r)) {
+        u->rumble_sent[0] = u->rumble[0];
+        u->rumble_sent[1] = u->rumble[1];
+        u->rumble_pending = 0;
+    }
+}
+
 int usbpad_poll(usbpad *u, pad_state *st)
 {
     struct usb_fs_complete done;
@@ -372,6 +422,7 @@ int usbpad_poll(usbpad *u, pad_state *st)
             got = 1;
         }
     }
+    rumble_flush(u);
     /* A re-enumeration does not always fail the pending reads at once.
      * (USB_GET_DEVICEINFO fails on the 8BitDo dongle, so it is not used.) */
     if (now - u->t_alive >= T_ALIVE) {

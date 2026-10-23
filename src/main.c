@@ -68,7 +68,7 @@ typedef struct {
     int ps_latch;               /* PS (Home) held since before: not a new press */
     char model[80];             /* "<name> (<mode>)", for the notifications */
     int swap;                   /* A/B and X/Y exchanged (config.h) */
-    unsigned char remote[64];   /* the last GetRemoteSetting bytes logged (rumble research) */
+    unsigned char remote[256];  /* the last GetRemoteSetting bytes logged (rumble research) */
     int32_t remote_ret;
     long remote_at;
     char user[40];              /* the console user's name, for the settings page */
@@ -79,7 +79,7 @@ static ctl g_ctl[HOST_MAX_PADS];
 
 /* Rumble research: what the console asks of each live virtual pad, read
  * every 16 ms (games pulse rumble for tens of milliseconds) and logged when
- * it changes, at most 20 lines a second. */
+ * it changes, all 256 bytes, at most 40 lines a second. */
 #define T_REMOTE 16
 static long g_remote_window;
 static int g_remote_lines;
@@ -94,18 +94,20 @@ static void remote_poll(int slot, long now)
     c->remote_at = now;
     r = vpad_remote_setting(slot, buf, sizeof buf);
     if (r == -1) return;
+    /* [3] large motor, [4] small motor, as on a DualShock 4 (PS4 games) */
+    if (r == 0) usbpad_rumble(c->pad, buf[3], buf[4]);
     if (now - g_remote_window >= 1000) {
         g_remote_window = now;
         g_remote_lines = 0;
     }
     if (r == c->remote_ret && !memcmp(buf, c->remote, sizeof c->remote)) return;
-    if (g_remote_lines >= 20) return;           /* logged next time it differs */
+    if (g_remote_lines >= 40) return;           /* logged next time it differs */
     g_remote_lines++;
     if (r != c->remote_ret) log_line("slot %d: remote setting returns %#x", slot, (unsigned)r);
     {
         char hex[3 * 32 + 1];
         int i, k;
-        for (k = 0; k < 64; k += 32) {
+        for (k = 0; k < 256; k += 32) {
             if (!memcmp(buf + k, c->remote + k, 32) && r == c->remote_ret) continue;
             for (i = 0; i < 32; i++) snprintf(hex + 3 * i, 4, "%02x ", buf[k + i]);
             log_line("slot %d: remote[%02d] %s", slot, k, hex);
@@ -298,6 +300,7 @@ int main(void)
             ctl *c = &g_ctl[i];
             if (!c->vpad_made || !vpad_off(i)) continue;
             vpad_remove(i);
+            usbpad_rumble(c->pad, 0, 0);
             c->vpad_made = 0;
             c->turned_off = 1;
             c->ps_latch = (c->st.buttons & PAD_PS) != 0;
@@ -326,6 +329,15 @@ int main(void)
     log_line("stopping: %s", why);
     for (i = 0; i < HOST_MAX_PADS; i++) {
         if (g_ctl[i].vpad_made) vpad_remove(i);
+        if (g_ctl[i].pad && usbpad_can_rumble(g_ctl[i].pad)) {
+            pad_state st;
+            int k;
+            usbpad_rumble(g_ctl[i].pad, 0, 0);          /* no pad left rumbling */
+            for (k = 0; k < 10; k++) {
+                usbpad_poll(g_ctl[i].pad, &st);
+                usleep(2000);
+            }
+        }
         usbpad_close(g_ctl[i].pad);
     }
     web_stop();

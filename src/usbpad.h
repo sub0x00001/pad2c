@@ -15,6 +15,8 @@
 
 #include "pad.h"
 
+#include <stdint.h>
+
 typedef struct usbpad usbpad;
 
 /* Looks for a supported pad not open already. NULL if there is none right
@@ -27,6 +29,12 @@ usbpad *usbpad_open(void);
 int usbpad_poll(usbpad *u, pad_state *st);
 
 void usbpad_close(usbpad *u);
+
+/* Rumble, 0..255 per motor (large: strong and slow, small: fast). Sent on the
+ * next usbpad_poll; only XInput pads with an OUT endpoint for now (the
+ * 8BitDo USB Wireless Adapter 2 passes it on to PlayStation controllers). */
+int  usbpad_can_rumble(const usbpad *u);
+void usbpad_rumble(usbpad *u, uint8_t large, uint8_t small);
 const char *usbpad_name(const usbpad *u);     /* the product, as the device names itself */
 const char *usbpad_mode(const usbpad *u);     /* "DInput" or "XInput" */
 
