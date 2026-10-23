@@ -113,6 +113,25 @@ mode, so the console's Accessories list shows only the controller.
 Pairing a DualSense with the adapter unpairs it from the console: plug it into the console with its cable and press
 PS to pair it back. The adapter takes one controller at a time.
 
+## The GameSir G8 Plus Galileo through the adapter
+
+The G8's Bluetooth modes are Android, Switch and G-Touch; the USB Wireless Adapter 2 accepts only its **Switch**
+mode. It then works in both of the adapter's modes, with two things to know:
+
+| Adapter mode | Buttons | Vibration |
+|---|---|---|
+| **Switch** (hold **- + L** for 3 s) | tick **Nintendo layout** on the "Pro Controller" card of the settings page | ✅ (PS4 games) |
+| XInput (automatic) | tick **Nintendo layout** on the "8BitDo USB Wireless Adapter 2" card | ❌ the adapter passes rumble in XInput to PlayStation controllers only |
+
+- **Nintendo layout:** in Switch mode the G8 sends its buttons by their printed letter (its bottom button is "A",
+  which a Switch reads as the right one), not by position. A genuine Switch Pro Controller needs no setting.
+- **Weak rumble:** simple rumble motors like the G8's do not move below a certain strength, and the Switch format
+  splits rumble into a low and a high band, of which such pads feel mostly the low one. In the Switch mode,
+  padbridge sends the stronger motor to the low band and starts any rumble at about 40%, so a light request (Crash
+  Bandicoot's spin asks 25%) is still felt.
+- The setting is kept per card, so the G8 and a DualSense can share the adapter: the DualSense uses the adapter's
+  XInput mode, without Nintendo layout.
+
 ## The Ultimate 2C's two dongle modes
 
 The controller keeps the last mode chosen. With the controller on:
