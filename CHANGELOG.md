@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.0
+- **Vibration in PS4 games**, on controllers in XInput mode: padbridge reads what the game asks of the virtual
+  DualSense (`scePadVirtualDeviceGetRemoteSetting`, large and small motors as on a DualShock 4) every 16 ms and sends
+  it as XInput rumble. Tested with Crash Bandicoot N. Sane Trilogy and the Ultimate 2C in XInput mode. Rumble stops
+  when the console turns a controller off and when padbridge stops. The log says when a controller's rumble starts
+  and stops.
+- **View + Menu together as the touchpad** on XInput controllers, which have no touchpad and, for the Ultimate 2C,
+  no L4/R4 in that mode. View or Menu alone waits 60 ms for the other, so the touchpad never opens the Create menu.
+- Not possible, found out: PS5 games do not rumble (the console turns their requests into DualSense haptic audio
+  before the virtual DualSense sees them); the Ultimate 2C does not rumble in DInput mode (8BitDo documents rumble
+  for XInput only); its Star and Mapping buttons never reach the console.
+
 ## 1.2.0
 - **pad2c is now padbridge**: it is no longer about one controller. The payloads are `padbridge-<version>.elf` and
   `padbridge-probe.elf`, notifications read "padbridge by Sub", and its files live in `/data/padbridge`. On its first

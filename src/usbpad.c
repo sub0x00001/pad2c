@@ -52,7 +52,6 @@ struct usbpad {
     int logged_first;
     unsigned char rumble[2], rumble_sent[2];    /* large, small motor: wanted, last sent */
     int rumble_pending;
-    unsigned char raw_last[20];     /* research: the last raw report logged */
 };
 
 static int dead_errno(int e)
@@ -319,7 +318,7 @@ usbpad *usbpad_open(void)
             /* Logged once per device: what is plugged in and not read, to
              * tell why a controller does nothing (another mode, say). */
             if (not_pad && strcmp(g_logged[bus][addr], g_reject) != 0) {
-                log_line("usb: %s %s: not a controller padbridge reads", path, g_reject);
+                log_line("usb: %s %s: not read by padbridge", path, g_reject);
                 snprintf(g_logged[bus][addr], sizeof g_logged[bus][addr], "%s", g_reject);
             }
             g_not_pad[bus][addr].set = (unsigned char)not_pad;
@@ -414,14 +413,6 @@ int usbpad_poll(usbpad *u, pad_state *st)
         if (i == EP_OUT) continue;
         if (u->ep[i].status) continue;              /* cancelled or stalled: read again */
         if (!u->ep[i].aFrames) continue;
-        /* research: raw XInput reports, logged when they change */
-        if (u->kind == USBPAD_XINPUT && (memcmp(u->raw_last, u->buf[i], 20) != 0)) {
-            char hex[3 * 20 + 1];
-            int k;
-            memcpy(u->raw_last, u->buf[i], 20);
-            for (k = 0; k < 20; k++) snprintf(hex + 3 * k, 4, "%02x ", u->buf[i][k]);
-            log_line("usb: %s raw %s", u->path, hex);
-        }
         if (u->kind == USBPAD_XINPUT ? usbpad_parse_xinput(u->buf[i], (int)u->lenp[i][0], st)
                                      : usbpad_parse_8bitdo(u->buf[i], (int)u->lenp[i][0], st)) {
             if (!u->logged_first) {

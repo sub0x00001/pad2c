@@ -72,53 +72,37 @@ typedef struct {
     int xinput;                 /* View + Menu as the touchpad (combo.h) */
     combo combo;
     pad_state sent;             /* what the virtual pad was last given */
-    unsigned char remote[256];  /* the last GetRemoteSetting bytes logged (rumble research) */
-    int32_t remote_ret;
-    long remote_at;
+    long remote_at;             /* ms: rumble last read */
+    int rumbling;
     char user[40];              /* the console user's name, for the settings page */
     long user_at;               /* ms: when it was last looked up */
 } ctl;
 
 static ctl g_ctl[HOST_MAX_PADS];
 
-/* Rumble research: what the console asks of each live virtual pad, read
- * every 16 ms (games pulse rumble for tens of milliseconds) and logged when
- * it changes, all 256 bytes, at most 40 lines a second. */
+/* Rumble: what the console asks of each live virtual pad, read every 16 ms
+ * (games pulse rumble for tens of milliseconds). It is kept as a DualShock 4
+ * output report: [3] large motor, [4] small motor. PS4 games fill them; PS5
+ * games turn rumble into DualSense haptics inside the system and leave them
+ * at 0. Logged when a pad's rumble starts and stops. */
 #define T_REMOTE 16
-static long g_remote_window;
-static int g_remote_lines;
 
 static void remote_poll(int slot, long now)
 {
     ctl *c = &g_ctl[slot];
     unsigned char buf[256];
-    int32_t r;
+    int on;
 
     if (!c->vpad_made || now - c->remote_at < T_REMOTE) return;
     c->remote_at = now;
-    r = vpad_remote_setting(slot, buf, sizeof buf);
-    if (r == -1) return;
-    /* [3] large motor, [4] small motor, as on a DualShock 4 (PS4 games) */
-    if (r == 0) usbpad_rumble(c->pad, buf[3], buf[4]);
-    if (now - g_remote_window >= 1000) {
-        g_remote_window = now;
-        g_remote_lines = 0;
+    if (vpad_remote_setting(slot, buf, sizeof buf) != 0) return;
+    usbpad_rumble(c->pad, buf[3], buf[4]);
+    on = buf[3] || buf[4];
+    if (on != c->rumbling) {
+        c->rumbling = on;
+        log_line("slot %d: rumble %s%s", slot, on ? "on" : "off",
+                 on && !usbpad_can_rumble(c->pad) ? " (this pad cannot rumble)" : "");
     }
-    if (r == c->remote_ret && !memcmp(buf, c->remote, sizeof c->remote)) return;
-    if (g_remote_lines >= 40) return;           /* logged next time it differs */
-    g_remote_lines++;
-    if (r != c->remote_ret) log_line("slot %d: remote setting returns %#x", slot, (unsigned)r);
-    {
-        char hex[3 * 32 + 1];
-        int i, k;
-        for (k = 0; k < 256; k += 32) {
-            if (!memcmp(buf + k, c->remote + k, 32) && r == c->remote_ret) continue;
-            for (i = 0; i < 32; i++) snprintf(hex + 3 * i, 4, "%02x ", buf[k + i]);
-            log_line("slot %d: remote[%02d] %s", slot, k, hex);
-        }
-    }
-    c->remote_ret = r;
-    memcpy(c->remote, buf, sizeof c->remote);
 }
 
 /* From the settings page. */
@@ -293,7 +277,7 @@ int main(void)
                     g_ctl[i].xinput = !strcmp(usbpad_mode(g_ctl[i].pad), "XInput");
                     combo_reset(&g_ctl[i].combo);
                     g_ctl[i].user_at = -10000;
-                    g_ctl[i].remote_ret = 0x7fffffff;      /* the first read is logged */
+                    g_ctl[i].rumbling = 0;
                     log_line("slot %d: %s%s", i, usbpad_name(g_ctl[i].pad), g_ctl[i].swap ? ", A/B and X/Y swapped" : "");
                 }
                 break;

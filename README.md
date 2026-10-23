@@ -42,17 +42,28 @@ controller with it, switch the controller on: nothing to set on the adapter.
 
 | Connection | Result |
 |---|---|
-| 2.4G dongle, DInput mode (`2dc8:301c`) | ✅ all buttons, L4/R4 as the touchpad click |
-| 2.4G dongle, XInput mode (`2dc8:310a`) | ✅ all buttons except L4/R4 (the controller does not send them in this mode) |
-| USB cable (`2dc8:310a`, XInput) | ✅ all buttons except L4/R4 |
+| 2.4G dongle, DInput mode (`2dc8:301c`) | ✅ all buttons, L4/R4 as the touchpad click; no vibration (the controller only rumbles in XInput) |
+| 2.4G dongle, XInput mode (`2dc8:310a`) | ✅ all buttons, **vibration** in PS4 games, View + Menu as the touchpad (the controller sends no L4/R4 in this mode) |
+| USB cable (`2dc8:310a`, XInput) | ✅ as XInput mode above |
 
 The 8BitDo Ultimate 2C **Bluetooth** Controller (the Switch edition, without a dongle) is a different product and is
 not supported directly; it works through the USB Wireless Adapter 2.
 
+The Ultimate 2C's **Star** and **Mapping** buttons never reach the console, in either mode: the controller keeps
+them for its own turbo and mapping settings.
+
+### Vibration
+
+**PS4 games** rumble controllers in **XInput** mode (tested: Crash Bandicoot N. Sane Trilogy with the Ultimate 2C).
+padbridge reads what the game asks of the virtual DualSense (`scePadVirtualDeviceGetRemoteSetting`: the large and
+small motors, as on a DualShock 4) and sends it on as XInput rumble.
+
+**PS5 games do not rumble**: they send DualSense haptics, and the console turns even their classic rumble requests
+into haptic audio before the virtual DualSense sees them. Controllers in DInput mode do not rumble either.
+
 ### Not yet
 
-Vibration, light bar, motion sensors, audio. PS5 games send DualSense haptics as audio to the controller, and a
-virtual DualSense has no known way to receive them yet.
+Vibration in PS5 games, light bar, motion sensors, audio.
 
 ## Install
 
@@ -87,7 +98,7 @@ mode, so the console's Accessories list shows only the controller.
 
 | Mode | How | Notes |
 |---|---|---|
-| XInput (`2dc8:3106`) | automatic | everything but a DualSense's touchpad |
+| XInput (`2dc8:3106`) | automatic | vibration in PS4 games (expected for PlayStation controllers, untested); View + Menu as the touchpad |
 | DInput (`2dc8:3105`) | hold **View + Left** (Create + Left on a DualSense) for 3 s; the light blinks twice | passes a DualSense's touchpad click |
 | back to automatic | hold the adapter's button until its light goes off, then pair the controller again | |
 | DualShock 4 (`054c:05c4`) | where it ends on a PS5 without padbridge's answer | does not work: it stops sending after a moment |
@@ -112,12 +123,15 @@ The controller keeps the last mode chosen. With the controller on:
 | Home / Guide | PS |
 | L3 / R3 | L3 / R3 |
 | Ultimate 2C L4 / R4 (DInput), DualSense touchpad (adapter, DInput) | touchpad click |
+| View + Menu pressed together, on XInput controllers | touchpad click |
 
 ## Notes
 
 - "Turn off" in the console's menu disconnects the controller from the console, as with a DualSense, and Home
   connects it again. The controller itself stays on until it goes to sleep by itself.
 - Every notification reads "padbridge by Sub", then the controller, its mode and what happened.
+- On XInput controllers, View or Menu pressed alone reaches the console 60 ms late: padbridge waits that long for
+  the other one, so that View + Menu (the touchpad) does not open the Create menu on the way.
 
 ## Files
 

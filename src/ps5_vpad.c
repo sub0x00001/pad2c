@@ -566,9 +566,10 @@ void vpad_shutdown(void)
 }
 
 /* padbridge: what the console asks of the slot's virtual pad (rumble, light
- * bar), as scePadVirtualDeviceGetRemoteSetting returns it; the layout is being
- * worked out (on a PS4 it is close to a DualShock 4 output report: [3] large
- * motor, [4] small motor, [5..7] light bar). The buffer is cleared first. The
+ * bar), as scePadVirtualDeviceGetRemoteSetting returns it: close to a
+ * DualShock 4 output report, [0] update flag, [3] large motor, [4] small
+ * motor, [5..7] light bar, [56] a user is assigned (seen on PS5 13.60, as
+ * Control4Free found on a PS4). The buffer is cleared first. The
  * call's return, or -1 if the slot has no live pad. */
 int32_t vpad_remote_setting(int slot, uint8_t *buf, size_t size)
 {
