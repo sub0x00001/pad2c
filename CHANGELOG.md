@@ -11,7 +11,8 @@
   **vibration** for Switch-type controllers paired with it (tested: GameSir G8 Plus Galileo in Switch mode). The
   adapter passes rumble in XInput mode to PlayStation controllers only. padbridge does the USB handshake and
   subcommands at connection, reads report 0x30 by position (Capture as the touchpad), and sends HD Rumble encoded
-  as SDL does.
+  as SDL does, with two changes for third-party pads, which hardly feel weak or high-band rumble: the low band takes
+  the stronger of the two motors, and any rumble starts at 40% (Crash Bandicoot's spin asks 25%).
 - **View + Menu together as the touchpad** on XInput controllers, which have no touchpad and, for the Ultimate 2C,
   no L4/R4 in that mode. View or Menu alone waits 60 ms for the other, so the touchpad never opens the Create menu.
 - Not possible, found out: PS5 games do not rumble (the console turns their requests into DualSense haptic audio

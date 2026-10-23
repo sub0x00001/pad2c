@@ -120,14 +120,23 @@ static uint16_t low_amp(uint16_t a)
     return t[100][1];
 }
 
+uint8_t switch_rumble_boost(uint8_t v)
+{
+    return v ? (uint8_t)(SWITCH_RUMBLE_FLOOR + (v * (255 - SWITCH_RUMBLE_FLOOR) + 127) / 255) : 0;
+}
+
 void switch_rumble_encode(uint8_t large, uint8_t small, unsigned char out[8])
 {
     static const unsigned char neutral[4] = { 0x00, 0x01, 0x40, 0x40 };
     /* SDL's fixed frequencies: the high band 0x0074, the low band 0x3d */
     const uint16_t hf = 0x0074;
     const uint8_t lf = 0x3D;
-    uint8_t ha = high_amp((uint16_t)(small * 257));
-    uint16_t la = low_amp((uint16_t)(large * 257));
+    uint8_t ha;
+    /* The low band takes the stronger of the two motors, not the large one
+     * alone: third-party pads (the GameSir G8 through the USB Wireless
+     * Adapter 2) hardly feel the high band, and some games rumble with the
+     * small motor only (Crash Bandicoot's spin: 0/63). */
+    uint16_t la;
     unsigned char d[4];
 
     if (!large && !small) {
@@ -135,6 +144,10 @@ void switch_rumble_encode(uint8_t large, uint8_t small, unsigned char out[8])
         memcpy(out + 4, neutral, 4);
         return;
     }
+    large = switch_rumble_boost(large);
+    small = switch_rumble_boost(small);
+    ha = high_amp((uint16_t)(small * 257));
+    la = low_amp((uint16_t)((large > small ? large : small) * 257));
     d[0] = (unsigned char)(hf & 0xFF);
     d[1] = (unsigned char)(ha | ((hf >> 8) & 0x01));
     d[2] = (unsigned char)(lf | ((la >> 8) & 0x80));

@@ -31,8 +31,17 @@ void switch_sticks_reset(switch_sticks *c);
 /* Report 0x30 or 0x21 to a DualSense state. 0 if it is neither. */
 int switch_parse(const unsigned char *r, int n, switch_sticks *cal, pad_state *st);
 
-/* The 8 rumble bytes (left and right, the same) for a large (low band) and a
- * small (high band) motor strength, 0..255: SDL's encoding and tables. */
+/* The 8 rumble bytes (left and right, the same) for a large and a small motor
+ * strength, 0..255: SDL's encoding and tables. The high band follows the small
+ * motor; the low band the stronger of the two (third-party pads hardly feel
+ * the high band). */
 void switch_rumble_encode(uint8_t large, uint8_t small, unsigned char out[8]);
+
+/* A motor strength lifted over the threshold of simple rumble motors: 0 stays
+ * 0, anything else goes from SWITCH_RUMBLE_FLOOR to 255. A weak request (Crash
+ * Bandicoot's spin asks 63) is otherwise not felt at all on a third-party pad
+ * through the adapter. */
+#define SWITCH_RUMBLE_FLOOR 100
+uint8_t switch_rumble_boost(uint8_t v);
 
 #endif

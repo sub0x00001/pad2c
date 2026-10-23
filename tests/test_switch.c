@@ -127,6 +127,20 @@ static void test_rumble(void)
     CHECK(d[0] == 0x74 && (d[1] & 0xFE) == 0xC8, "full high band: %02x %02x", d[0], d[1]);
     CHECK((d[2] & 0x7F) == 0x3D && d[3] == 0x72, "full low band: %02x %02x", d[2], d[3]);
 
+    /* the small motor alone (Crash's spin: 0/63) must reach the low band too:
+     * third-party pads (the GameSir G8 through the adapter) hardly feel the
+     * high band */
+    switch_rumble_encode(0, 63, d);
+    CHECK((d[1] & 0xFE) != 0, "small motor: high band amplitude (%02x)", d[1]);
+    CHECK(d[3] != 0x40 || (d[2] & 0x80), "small motor alone: low band silent (%02x %02x)", d[2], d[3]);
+
+    /* weak requests are lifted over the motors' threshold: 63 (25%) ends up
+     * well past the low band's quarter */
+    switch_rumble_encode(0, 63, d);
+    CHECK(((d[2] & 0x80) << 1 | d[3]) >= 0x0060, "a weak request stays below the threshold (%02x %02x)", d[2], d[3]);
+    CHECK(switch_rumble_boost(0) == 0 && switch_rumble_boost(255) == 255, "boost ends");
+    CHECK(switch_rumble_boost(1) >= SWITCH_RUMBLE_FLOOR, "boost floor");
+
     switch_rumble_encode(128, 0, d);
     CHECK(memcmp(d, neutral, 4) != 0, "the large motor alone rumbles");
     CHECK((d[1] & 0xFE) == 0x00, "large motor only: no high band amplitude (%02x)", d[1]);
