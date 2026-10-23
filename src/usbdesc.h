@@ -12,6 +12,7 @@ enum {
     USBPAD_NONE = 0,
     USBPAD_8BITDO,      /* 8BitDo DInput: HID report 1 (map8bitdo.c) */
     USBPAD_XINPUT,      /* Xbox 360 protocol, vendor interface ff/5d/01 (mapxinput.c) */
+    USBPAD_SWITCH,      /* Nintendo Switch Pro Controller, 057e:2009 (mapswitch.c) */
 };
 
 typedef struct {
@@ -25,10 +26,11 @@ typedef struct {
 
 /* Picks the interface to read:
  *   1. an XInput interface (class ff, subclass 5d, protocol 01), any vendor;
- *   2. on an 8BitDo, the first HID interface that is not a boot keyboard or
+ *   2. a Switch Pro Controller (057e:2009): its HID interface;
+ *   3. on an 8BitDo, the first HID interface that is not a boot keyboard or
  *      mouse (the 8BitDo 310a receiver also has a keyboard interface).
  * Each needs an interrupt IN endpoint. Returns the kind, USBPAD_NONE if none. */
-int usbdesc_choose(const unsigned char *cfg, int len, uint16_t vid, usbdesc_pick *out);
+int usbdesc_choose(const unsigned char *cfg, int len, uint16_t vid, uint16_t pid, usbdesc_pick *out);
 
 /* A string descriptor (UTF-16LE) as ASCII, '?' for anything else, trailing
  * spaces dropped, cut to fit `size`. 0 if it is not one or is blank. */
