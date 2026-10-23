@@ -35,7 +35,7 @@ controller with it, switch the controller on: nothing to set on the adapter.
 |---|---|---|
 | DualSense | its normal pairing (Create + PS) | ✅ all buttons, touchpad click (DInput mode) |
 | 8BitDo Ultimate 2C Wireless | Switch mode (Home + Y) | ✅ all buttons |
-| GameSir G8 Plus Galileo | Switch mode (its only mode the adapter accepts) | ✅ with **Nintendo layout** on (it sends A/B and X/Y swapped) |
+| GameSir G8 Plus Galileo | Switch mode (its only mode the adapter accepts) | ✅ with **Nintendo layout** on (it sends A/B and X/Y by label); **vibration** with the adapter in its Switch mode |
 | Anything else the adapter accepts (DualShock 4, Xbox One / Series, Switch Pro, Joy-Con, Wii U Pro, 8BitDo) | | expected to work, untested: please report |
 
 ### 8BitDo Ultimate 2C Wireless on its own dongle
@@ -54,9 +54,15 @@ them for its own turbo and mapping settings.
 
 ### Vibration
 
-**PS4 games** rumble controllers in **XInput** mode (tested: Crash Bandicoot N. Sane Trilogy with the Ultimate 2C).
-padbridge reads what the game asks of the virtual DualSense (`scePadVirtualDeviceGetRemoteSetting`: the large and
-small motors, as on a DualShock 4) and sends it on as XInput rumble.
+**PS4 games** rumble the controller (tested: Crash Bandicoot N. Sane Trilogy). padbridge reads what the game asks of
+the virtual DualSense (`scePadVirtualDeviceGetRemoteSetting`: the large and small motors, as on a DualShock 4) and
+sends it on:
+
+| Controller | Rumbles |
+|---|---|
+| Ultimate 2C on its dongle | in XInput mode (tested) |
+| Through the USB Wireless Adapter 2, Switch-type controllers (GameSir G8 tested, Switch Pro, Joy-Con) | with the adapter in its **Switch mode** (tested) |
+| Through the USB Wireless Adapter 2, PlayStation controllers | in XInput mode, as 8BitDo documents (untested) |
 
 **PS5 games do not rumble**: they send DualSense haptics, and the console turns even their classic rumble requests
 into haptic audio before the virtual DualSense sees them. Controllers in DInput mode do not rumble either.
@@ -100,6 +106,7 @@ mode, so the console's Accessories list shows only the controller.
 |---|---|---|
 | XInput (`2dc8:3106`) | automatic | vibration in PS4 games (expected for PlayStation controllers, untested); View + Menu as the touchpad |
 | DInput (`2dc8:3105`) | hold **View + Left** (Create + Left on a DualSense) for 3 s; the light blinks twice | passes a DualSense's touchpad click |
+| Switch (`057e:2009`, a Switch Pro Controller) | hold **- + L** (View + LB) for 3 s; the light blinks twice | **vibration for Switch-type controllers** (the adapter passes it on only in this mode); Capture as the touchpad; buttons by position, so a pad that sends them by label (GameSir G8) needs Nintendo layout |
 | back to automatic | hold the adapter's button until its light goes off, then pair the controller again | |
 | DualShock 4 (`054c:05c4`) | where it ends on a PS5 without padbridge's answer | does not work: it stops sending after a moment |
 
@@ -124,6 +131,7 @@ The controller keeps the last mode chosen. With the controller on:
 | L3 / R3 | L3 / R3 |
 | Ultimate 2C L4 / R4 (DInput), DualSense touchpad (adapter, DInput) | touchpad click |
 | View + Menu pressed together, on XInput controllers | touchpad click |
+| Switch Pro (and the adapter's Switch mode): B / A / Y / X, L / R, ZL / ZR, - / +, Home, Capture | ✕ / ○ / □ / △ (by position), L1 / R1, L2 / R2, Create / Options, PS, touchpad click |
 
 ## Notes
 
@@ -176,8 +184,13 @@ not read, with its id and name: a controller in another mode (Switch, DS4) shows
   its own virtual DualSense. New devices are looked for every 100 ms. The console's own HID driver holds the
   interface but ignores the device. The internal Bluetooth chip (`ugen0.2`) is never touched.
 - `src/usbdesc.c` picks the interface from the USB descriptor: XInput (`ff/5d/01`) from any vendor first, then an
-  8BitDo HID interface, never a keyboard. `src/map8bitdo.c` (8BitDo DInput report 1) and `src/mapxinput.c` (Xbox 360
-  report) turn the reports into DualSense buttons.
+  Switch Pro Controller (`057e:2009`), then an 8BitDo HID interface, never a keyboard. `src/map8bitdo.c` (8BitDo
+  DInput report 1), `src/mapxinput.c` (Xbox 360 report) and `src/mapswitch.c` (Switch Pro report 0x30) turn the
+  reports into DualSense buttons.
+- A Switch Pro Controller gets the USB handshake (80 02, 80 03, 80 02, 80 04) and its subcommands (full reports,
+  vibration, player light) at connection; without them it keeps enumerating again. Its rumble is HD Rumble, encoded
+  as SDL does and sent again every 50 ms while on.
+- Rumble: `scePadVirtualDeviceGetRemoteSetting` is read every 16 ms per virtual pad (motors at [3] and [4]).
 - XInput devices get what Windows sends first (the Microsoft OS string and the XUSB vendor request, then the LED):
   the USB Wireless Adapter 2 keeps XInput when its host answers like that. A boot keyboard or mouse beside the pad is
   detached from the console's driver.
@@ -205,6 +218,11 @@ make          # dist/padbridge-<version>.elf and dist/padbridge-probe.elf
 - The virtual DualSense code (`ps5_vpad.c`) and the helpers `log.c`, `util.c`, `lock.c`, `ps5_power.c` and `pad.h`
   come from **AnyPad PS5** by **@elmonomalvad0** (sinfiltros), GPL-3.0-or-later, adapted here.
 - [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk) by John Törnblom.
+- The Switch Pro Controller's USB protocol and HD Rumble: [dekuNukem's Nintendo Switch reverse engineering
+  notes](https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering), and [SDL](https://github.com/libsdl-org/SDL)'s
+  HIDAPI Switch driver, whose rumble tables `src/mapswitch.c` uses (zlib licence).
+- [Control4Free](https://github.com/MoHadiShibli/Control4Free) (GPL-3.0), whose notes showed that
+  `scePadVirtualDeviceGetRemoteSetting` returns what a game asks of a virtual pad.
 
 ## Licence
 

@@ -1,11 +1,16 @@
 # Changelog
 
 ## 1.3.0
-- **Vibration in PS4 games**, on controllers in XInput mode: padbridge reads what the game asks of the virtual
+- **Vibration in PS4 games**, on controllers in XInput mode and Switch Pro controllers: padbridge reads what the game asks of the virtual
   DualSense (`scePadVirtualDeviceGetRemoteSetting`, large and small motors as on a DualShock 4) every 16 ms and sends
   it as XInput rumble. Tested with Crash Bandicoot N. Sane Trilogy and the Ultimate 2C in XInput mode. Rumble stops
   when the console turns a controller off and when padbridge stops. The log says when a controller's rumble starts
   and stops.
+- **Switch Pro Controller over USB** (`057e:2009`): the USB Wireless Adapter 2 in its **Switch mode** (- + L), with
+  **vibration** for Switch-type controllers paired with it (tested: GameSir G8 Plus Galileo in Switch mode). The
+  adapter passes rumble in XInput mode to PlayStation controllers only. padbridge does the USB handshake and
+  subcommands at connection, reads report 0x30 by position (Capture as the touchpad), and sends HD Rumble encoded
+  as SDL does.
 - **View + Menu together as the touchpad** on XInput controllers, which have no touchpad and, for the Ultimate 2C,
   no L4/R4 in that mode. View or Menu alone waits 60 ms for the other, so the touchpad never opens the Create menu.
 - Not possible, found out: PS5 games do not rumble (the console turns their requests into DualSense haptic audio
