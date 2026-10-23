@@ -14,7 +14,8 @@
  * "Turn off" from the console's menu removes the virtual pad, as a DualSense
  * disconnects; Home (PS) brings it back, as it switches a DualSense on.
  *
- * Stop: create /data/padbridge/stop. It also stops by itself before rest mode.
+ * Stop: create /data/padbridge/stop. In rest mode it lets the controllers go
+ * and waits; when the console wakes, it looks for them again.
  * Log: /data/padbridge/padbridge.log
  * Up to 1.1.0 this was pad2c, in /data/pad2c: moved here on the first start.
  */
@@ -221,6 +222,45 @@ static const char *from_pad2c(void)
     return asked ? "pad2c was running: stopped, and its state moved here" : "pad2c's state moved here";
 }
 
+/* Every virtual pad removed, no pad left rumbling, every USB pad closed. */
+static void release_all(void)
+{
+    int i;
+
+    for (i = 0; i < HOST_MAX_PADS; i++) {
+        ctl *c = &g_ctl[i];
+        if (c->vpad_made) vpad_remove(i);
+        if (c->pad && usbpad_can_rumble(c->pad)) {
+            pad_state st;
+            int k;
+            usbpad_rumble(c->pad, 0, 0);
+            for (k = 0; k < 10; k++) {
+                usbpad_poll(c->pad, &st);
+                usleep(2000);
+            }
+        }
+        usbpad_close(c->pad);
+        memset(c, 0, sizeof *c);
+        pad_state_reset(&c->st);
+    }
+}
+
+/* Waits out rest mode. 1 when the console is working again, 0 if asked to
+ * stop meanwhile. */
+static int rest_wait(void)
+{
+    for (;;) {
+        int ps = power_state();
+        if (g_stop) return 0;
+        if (access(STOP_FLAG, F_OK) == 0) {
+            unlink(STOP_FLAG);
+            return 0;
+        }
+        if (ps == POWER_WORKING) return 1;
+        usleep(500000);
+    }
+}
+
 int main(void)
 {
     const char *moved;
@@ -313,8 +353,16 @@ int main(void)
             int ps = power_state();
             last_power = now;
             if (ps == POWER_GOING_TO_REST || ps == POWER_IN_REST) {
-                why = "rest mode";
-                break;
+                /* Rest mode: the pads are let go and padbridge waits, so that
+                 * it is there again when the console wakes (an autoload list
+                 * only runs at a cold start). */
+                log_line("rest mode: controllers let go, waiting for the console to wake");
+                release_all();
+                if (!rest_wait()) break;
+                vpad_shutdown();                /* the kernel log is opened anew when needed */
+                last_scan = -T_SCAN;
+                log_line("awake: looking for controllers again");
+                continue;
             }
         }
         if (now - last_check >= 1000) {
@@ -328,19 +376,7 @@ int main(void)
     }
 
     log_line("stopping: %s", why);
-    for (i = 0; i < HOST_MAX_PADS; i++) {
-        if (g_ctl[i].vpad_made) vpad_remove(i);
-        if (g_ctl[i].pad && usbpad_can_rumble(g_ctl[i].pad)) {
-            pad_state st;
-            int k;
-            usbpad_rumble(g_ctl[i].pad, 0, 0);          /* no pad left rumbling */
-            for (k = 0; k < 10; k++) {
-                usbpad_poll(g_ctl[i].pad, &st);
-                usleep(2000);
-            }
-        }
-        usbpad_close(g_ctl[i].pad);
-    }
+    release_all();
     web_stop();
     vpad_shutdown();
     vpad_creds_restore();

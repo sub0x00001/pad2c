@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1
+- **Rest mode no longer stops padbridge.** It used to stop before rest mode (as AnyPad PS5 did), and since an
+  autoload list only runs at a cold start, after waking the console had no padbridge: a 2C dongle in XInput mode then
+  showed up as a keyboard. Now padbridge lets the controllers go (rumble off, virtual pads removed, USB closed),
+  waits, and looks for them again when the console wakes, with the kernel log opened anew.
+
 ## 1.3.0
 - **Vibration in PS4 games**, on controllers in XInput mode and Switch Pro controllers: padbridge reads what the game asks of the virtual
   DualSense (`scePadVirtualDeviceGetRemoteSetting`, large and small motors as on a DualShock 4) every 16 ms and sends
